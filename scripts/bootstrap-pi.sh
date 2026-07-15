@@ -26,8 +26,16 @@ apt-get install -y --no-install-recommends \
     ufw fail2ban unattended-upgrades \
     caddy \
     postgresql-17 \
-    redis-server \
-    nodejs
+    redis-server
+
+log "Node.js 22 via nodesource (Debian Trixie ships 20, pnpm >= 10 needs 22)"
+if ! node --version 2>/dev/null | grep -q '^v22'; then
+    curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
+    apt-get install -y nodejs
+fi
+
+log "pnpm"
+npm install -g pnpm
 
 log "user groups (dialout, i2c, gpio) for umut"
 usermod -aG dialout,i2c,gpio umut || true
