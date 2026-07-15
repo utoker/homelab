@@ -1,0 +1,11 @@
+# secrets never in git — live on the Pi under /etc/homelab or per-app .env
+*.env
+!*.env.example
+
+# local editor cruft
+.DS_Store
+*.swp
+.vscode/
+.idea/
+
+# nothing else expected — this repo is config, not code

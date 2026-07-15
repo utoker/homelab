@@ -1,0 +1,35 @@
+# /etc/caddy/Caddyfile
+#
+# Reverse proxy for the two Pi-hosted apps. Certs auto-fetched from
+# Let's Encrypt via HTTP-01 (requires port 80 open at the router).
+
+{
+    # global options
+    email umut@utoker.com
+}
+
+airmon.utoker.com {
+    reverse_proxy 127.0.0.1:8000
+
+    encode gzip zstd
+
+    log {
+        output file /var/log/caddy/airmon.utoker.com.log {
+            roll_size 10MiB
+            roll_keep 7
+        }
+    }
+}
+
+api.coldtrace.app {
+    reverse_proxy 127.0.0.1:4000
+
+    encode gzip zstd
+
+    log {
+        output file /var/log/caddy/api.coldtrace.app.log {
+            roll_size 10MiB
+            roll_keep 7
+        }
+    }
+}

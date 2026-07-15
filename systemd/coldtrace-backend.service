@@ -1,0 +1,21 @@
+[Unit]
+Description=ColdTrace GraphQL backend (Apollo)
+After=network-online.target postgresql.service redis-server.service
+Wants=network-online.target
+Requires=postgresql.service redis-server.service
+
+[Service]
+Type=simple
+User=umut
+Group=umut
+WorkingDirectory=/home/umut/coldtrace/apps/backend
+EnvironmentFile=/home/umut/coldtrace/apps/backend/.env
+ExecStart=/usr/bin/pnpm start
+Restart=always
+RestartSec=5
+
+# Cap process footprint so a leak in one app cannot starve the others.
+MemoryMax=800M
+
+[Install]
+WantedBy=multi-user.target
