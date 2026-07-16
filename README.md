@@ -22,8 +22,13 @@ Two apps are served publicly with HTTPS from the Pi:
          ├── Vercel Edge ──►  coldtrace.app  (Next.js frontend)
          │                     │
          │                     ▼ Apollo Client → api.coldtrace.app/graphql
-         │
-         └── Spectrum residential router :80,443 forward to Pi
+         │                            │
+         │                            ▼
+         └── Cloudflare Edge (orange cloud proxy, hides origin IP)
+                   │  airmon.utoker.com
+                   │  api.coldtrace.app
+                   ▼
+             Spectrum residential router :80,443 forward to Pi
                    │
                    ▼
    ┌──────────────────── Pi 4 (4 GB, 24/7) ──────────────┐
@@ -37,7 +42,7 @@ Two apps are served publicly with HTTPS from the Pi:
    │  coldtrace-backend.service  apollo :4000            │
    │  postgresql@17-main.service data on SSD             │
    │  redis-server.service                               │
-   │  homelab-ddns.timer         Porkbun DDNS every 5 min│
+   │  homelab-ddns.timer         Cloudflare DDNS every 5 min│
    │                                                     │
    │  /mnt/ssd/postgres/         Postgres data           │
    │  /mnt/ssd/airmon-data/      SQLite (buffer + server)│
@@ -60,7 +65,7 @@ homelab/
 ## Setup docs
 
 - [docs/ssd.md](docs/ssd.md) — mount the USB SSD and relocate Postgres + SQLite onto it
-- [docs/dns.md](docs/dns.md) — Porkbun A records and API access
+- [docs/dns.md](docs/dns.md) — Cloudflare DNS + orange-cloud proxy, DDNS setup
 - [docs/security.md](docs/security.md) — ufw, fail2ban, unattended-upgrades
 - [docs/recovery.md](docs/recovery.md) — rebuild the Pi from scratch
 
@@ -68,7 +73,7 @@ homelab/
 
 Never committed. Live on the Pi only, `mode 0600`, owner `root`:
 
-- `/etc/homelab/porkbun.env` — Porkbun API keys for DDNS
+- `/etc/homelab/cloudflare.env` — Cloudflare API token + zone/record IDs for DDNS
 - `/home/umut/coldtrace/apps/backend/.env` — DB / Redis URLs, GraphQL secrets
 
 ## One-time bootstrap

@@ -1,5 +1,5 @@
 [Unit]
-Description=Update Porkbun A records every 5 minutes
+Description=Update Cloudflare A records every 5 minutes
 
 [Timer]
 OnBootSec=2min

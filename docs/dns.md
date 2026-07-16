@@ -1,52 +1,99 @@
-# DNS at Porkbun
+# DNS at Cloudflare
 
-Both `utoker.com` and `coldtrace.app` are registered at Porkbun and use Porkbun's
-nameservers.
+Both `utoker.com` and `coldtrace.app` are registered at Porkbun but use
+**Cloudflare's nameservers** (`kehlani.ns.cloudflare.com`, `lee.ns.cloudflare.com`).
+Porkbun stays the registrar (billing, WHOIS, transfer lock); Cloudflare hosts the
+authoritative DNS and, for the Pi-served hostnames, proxies traffic through its
+edge.
 
-## A records the Pi needs
+## Records per zone
 
-Add these once, in the Porkbun UI (Domain Management → DNS Records):
+Records marked **orange** are proxied through Cloudflare (edge TLS, WAF, hides
+origin IP). Records marked **grey** are DNS-only.
 
-| Type | Host  | Answer            | TTL |
-|------|-------|-------------------|-----|
-| A    | airmon | `<Pi public IP>` | 300 |
-| A    | api   | `<Pi public IP>`  | 300 |
+**utoker.com**
 
-The first is on `utoker.com`, the second on `coldtrace.app`. TTL 300 s so DDNS can flip
-the record on IP change without a long stale window.
+| Type  | Name              | Content                | Proxy   | TTL  |
+|-------|-------------------|------------------------|---------|------|
+| A     | utoker.com        | 76.76.21.21            | grey    | 600  |
+| A     | airmon.utoker.com | Pi public IP (DDNS)    | orange  | auto |
+| CNAME | www.utoker.com    | cname.vercel-dns.com   | grey    | 600  |
 
-Left untouched:
-- `utoker.com` apex A record → Vercel
-- `coldtrace.app` apex A record → Vercel
+**coldtrace.app**
 
-## API access for DDNS
+| Type  | Name              | Content                                | Proxy   | TTL  |
+|-------|-------------------|----------------------------------------|---------|------|
+| A     | coldtrace.app     | 216.198.79.1                           | grey    | 600  |
+| A     | api.coldtrace.app | Pi public IP (DDNS)                    | orange  | auto |
+| CNAME | *.coldtrace.app   | 317302a78fda56d9.vercel-dns-017.com    | grey    | 600  |
 
-Residential IP can rotate. `homelab-ddns.timer` runs `scripts/update-ddns.sh` every
-5 minutes to keep both A records aligned with the Pi's current public IP via Porkbun's
-REST API.
+The two apex A records and both Vercel-target records stay **grey** — Vercel
+handles its own edge and proxying through Cloudflare would break its cert
+provisioning.
 
-**One-time setup:**
+## Zone-level settings
 
-1. **Enable API per domain.** In Porkbun UI:
-   *Domain Management* → click each domain → *API ACCESS* → toggle ON.
-   Both `utoker.com` and `coldtrace.app` need it.
+- **SSL/TLS mode**: Full (strict). Cloudflare validates the origin's Let's
+  Encrypt cert. Anything less either breaks TLS or is insecure.
+- **Always Use HTTPS**: on.
 
-2. **Generate an API key pair** at
-   [porkbun.com/account/api](https://porkbun.com/account/api).
-   You get two values, both required:
-   - `API Key` (starts `pk1_...`)
-   - `Secret API Key` (starts `sk1_...`)
+## DDNS
 
-3. **Store the keys on the Pi**, `mode 0600`, owner `root`:
+Residential IP can rotate. `homelab-ddns.timer` runs
+[scripts/update-ddns.sh](../scripts/update-ddns.sh) every 5 minutes to keep the
+two proxied A records (`airmon.utoker.com`, `api.coldtrace.app`) aligned with the
+Pi's current public IP via Cloudflare's REST API.
+
+The record content is the *origin* IP; Cloudflare terminates the client
+connection at its edge and forwards to that IP. Clients never see the origin IP
+directly.
+
+### One-time setup
+
+1. **Create a Cloudflare API token** at
+   [dash.cloudflare.com/profile/api-tokens](https://dash.cloudflare.com/profile/api-tokens).
+   Use "Create Custom Token" with least-privilege permissions:
+
+   | Category | Permission | Level |
+   |----------|------------|-------|
+   | Zone | DNS | Edit |
+
+   **Zone Resources**: Include → Specific zone → `utoker.com`, then Add more →
+   Specific zone → `coldtrace.app`. Do NOT use "All zones" — the DDNS process
+   should only be able to touch these two zones.
+
+   **Client IP filter**: your home public IP. Set a long TTL (multi-year is fine
+   with the IP filter; the practical blast radius is zero from anywhere else).
+
+2. **Look up the zone and record IDs** so the script knows what to update.
+   Any machine with the token works; example uses the Pi:
+
+   ```bash
+   TOKEN=<paste the token>
+   for d in utoker.com coldtrace.app; do
+     ZID=$(curl -sH "Authorization: Bearer $TOKEN" \
+       "https://api.cloudflare.com/client/v4/zones?name=$d" \
+       | jq -r '.result[0].id')
+     echo "$d zone_id=$ZID"
+     curl -sH "Authorization: Bearer $TOKEN" \
+       "https://api.cloudflare.com/client/v4/zones/$ZID/dns_records?type=A" \
+       | jq -r '.result[] | select(.proxied) | "  \(.name) record_id=\(.id)"'
+   done
+   ```
+
+3. **Store the token and IDs on the Pi**, `mode 0600`, owner `root`:
 
    ```bash
    sudo mkdir -p /etc/homelab
-   sudo tee /etc/homelab/porkbun.env >/dev/null <<'EOF'
-   PORKBUN_API_KEY=pk1_your_key_here
-   PORKBUN_SECRET=sk1_your_secret_here
+   sudo tee /etc/homelab/cloudflare.env >/dev/null <<'EOF'
+   CF_API_TOKEN=paste_token_here
+   CF_ZONE_ID_UTOKER=paste_utoker_zone_id_here
+   CF_RECORD_ID_AIRMON=paste_airmon_record_id_here
+   CF_ZONE_ID_COLDTRACE=paste_coldtrace_zone_id_here
+   CF_RECORD_ID_API=paste_api_record_id_here
    EOF
-   sudo chmod 600 /etc/homelab/porkbun.env
-   sudo chown root:root /etc/homelab/porkbun.env
+   sudo chmod 600 /etc/homelab/cloudflare.env
+   sudo chown root:root /etc/homelab/cloudflare.env
    ```
 
 4. **Enable the timer:**
@@ -55,15 +102,22 @@ REST API.
    sudo systemctl enable --now homelab-ddns.timer
    ```
 
-5. **Verify:** run the script once by hand, watch the journal.
+5. **Verify:** run once by hand, watch the journal.
 
    ```bash
    sudo systemctl start homelab-ddns.service
    journalctl -u homelab-ddns.service -n 20 --no-pager
    ```
 
-   First run should say `airmon.utoker.com: already <ip>` (or update it). Repeated runs
-   are silent on stable IP.
+   First run should say `airmon.utoker.com: already <ip>` (or update it). Repeated
+   runs are silent on stable IP.
 
-The key file is NOT in git and never leaves the Pi. If the Pi is rebuilt, recreate
-the file from your password manager.
+The key file is NOT in git and never leaves the Pi. If the Pi is rebuilt,
+recreate it from your password manager.
+
+## Nameserver history
+
+- 2026-07-15: nameservers migrated from Porkbun (`*.ns.porkbun.com`) to Cloudflare
+  (`kehlani.ns.cloudflare.com`, `lee.ns.cloudflare.com`) for both domains, to put
+  Cloudflare's edge in front of the Pi-served hostnames. Porkbun remains the
+  registrar.
