@@ -15,7 +15,10 @@ git -C "$REPO" pull --ff-only
 log "install + build backend workspace"
 cd "$REPO"
 pnpm install --no-frozen-lockfile
-pnpm --filter backend build
+# turbo respects dependsOn, so this builds @coldtrace/backend and its
+# workspace deps (env, logger, database, types) in the right order.
+# `pnpm --filter backend build` skips turbo and fails on cold dist/.
+pnpm exec turbo run build --filter=@coldtrace/backend
 
 log "restart backend service"
 sudo systemctl restart coldtrace-backend.service
