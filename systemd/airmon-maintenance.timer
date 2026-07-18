@@ -1,0 +1,10 @@
+[Unit]
+Description=airmon daily maintenance at 03:45 local
+
+[Timer]
+OnCalendar=*-*-* 03:45:00
+Persistent=true
+RandomizedDelaySec=15min
+
+[Install]
+WantedBy=timers.target

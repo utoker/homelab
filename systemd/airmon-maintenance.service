@@ -1,0 +1,19 @@
+[Unit]
+Description=airmon daily maintenance (buffer prune + server retention + vacuum)
+After=network-online.target airmon-server.service
+Wants=airmon-server.service
+RequiresMountsFor=/srv/data
+
+[Service]
+Type=oneshot
+User=umut
+Group=umut
+Environment=AIRMON_BUFFER_DB=/srv/data/airmon/buffer.db
+Environment=AIRMON_DB_PATH=/srv/data/airmon/server.db
+Environment=AIRMON_BUFFER_RETENTION_DAYS=7
+Environment=AIRMON_SERVER_RETENTION_DAYS=30
+# cwd is set for the server ExecStart's `-m app.maintenance`; the pi
+# ExecStart uses absolute paths and does not depend on cwd.
+WorkingDirectory=/home/umut/airmon-server
+ExecStart=/home/umut/airmon/.venv/bin/python /home/umut/airmon/maintenance.py
+ExecStart=/home/umut/airmon-server/.venv/bin/python -m app.maintenance
