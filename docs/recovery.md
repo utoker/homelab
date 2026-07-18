@@ -62,8 +62,8 @@ Otherwise (fresh SSD):
 gunzip -c /path/to/coldtrace-<stamp>.sql.gz | sudo -u postgres psql -d coldtrace
 # restore airmon SQLite (server.db only; buffer.db is not backed up because it
 # is the agent's offline queue and every row is already durable in server.db --
-# the agent recreates it empty on first start):
-cp /path/to/server-<stamp>.db /srv/data/airmon/server.db
+# the agent recreates it empty on first start). Backups are gzipped:
+gunzip -c /path/to/server-<stamp>.db.gz > /srv/data/airmon/server.db
 sudo chown -R umut:umut /srv/data/airmon
 ```
 
@@ -191,22 +191,48 @@ the offsite copy. That means the bucket grows unbounded unless R2 itself is
 told to expire objects. Nothing in this repo does that; it is an operator
 step in the Cloudflare dashboard.
 
-**Sizing math (measured 2026-07-18):**
+**Sizing math (measured 2026-07-18, post-gzip):**
 
-- Today's nightly snapshot: pg_dump ~505 KB + server.db ~16 MB + secrets
-  ~10 KB ≈ **17 MB**.
-- server.db grows ~7.6 MB/day (16k readings/day at ~470 B/row plus SQLite
-  overhead), so tomorrow's snapshot is slightly bigger than today's.
-- With no lifecycle rule, bucket size after N days is
-  `sum(17 + 7.6·i for i in 0..N)` ≈ `3.8·N²` MB. That crosses the 10 GB free
-  tier at **day 51** and hits **~510 GB at year 1**. Not sustainable.
-- With an N-day lifecycle rule, the bucket instead holds N snapshots whose
-  sizes drift up over time. At year 1 (day 365) a 30-day rule holds ~80 GB,
-  a 90-day rule ~220 GB. Both are outside the free tier at 1 year
-  (~$1.20/mo and ~$3.30/mo respectively), but growth becomes linear in time
-  rather than quadratic, which is the point of doing this at all.
-- A truly-bounded bucket would need either row-level TTL on the source DB
-  or delta/incremental backups. Out of scope for now.
+- `server.db` alone: **16.8 MB** uncompressed, gzips to **6.5 MB** (2.6×).
+  Grows **~4.5 MB/day** (~17k readings/day at ~260 B/row after SQLite
+  overhead, from 64,519 rows collected over 3.74 days). Backup pipeline
+  gzips before write, so tomorrow's `server-*.db.gz` is a bit larger than
+  today's.
+- `coldtrace-*.sql.gz` ~505 KB, `secrets-*.tar.gz.gpg` ~10 KB. Both small
+  and roughly constant relative to the SQLite snapshot.
+- Today's total nightly snapshot on R2: **~7 MB**. Snapshot on day `i`:
+  ≈ `7 + 1.73·i` MB (that's the daily server-DB growth of 4.5 MB divided
+  by the 2.6× gzip ratio).
+
+**Without a lifecycle rule** — bucket accumulates every snapshot forever,
+size ≈ `7·N + 0.87·N²` MB:
+
+| Age    | Bucket   |
+| ------ | -------- |
+| 30 d   | ~1 GB    |
+| 90 d   | ~7.7 GB  |
+| ~105 d | ~10 GB (crosses free tier) |
+| 1 yr   | ~115 GB  |
+
+**With an N-day lifecycle rule** at year 1 (D = 365):
+
+| Rule   | Bucket @ 1 yr | Paid GB (over 10 GB free) | Monthly cost @ $0.015/GB-mo |
+| ------ | ------------- | ------------------------- | --------------------------- |
+| 14 d   | ~8.6 GB       | 0                         | free                        |
+| 30 d   | ~18 GB        | ~8 GB                     | ~$0.12                      |
+| 60 d   | ~34 GB        | ~24 GB                    | ~$0.36                      |
+| 90 d   | ~50 GB        | ~40 GB                    | ~$0.60                      |
+
+**Retention alone does not bound cost.** Each snapshot in the window itself
+grows ~1.73 MB/day (post-gzip), so under any fixed retention the bucket
+still grows linearly with calendar time. Year 5 with a 90-day rule is
+~280 GB, ~$4/mo.
+
+The real long-term fix is source-side: **downsample old airmon readings**
+(e.g. keep raw for 30 days, then 5-min averages for a year, then hourly
+after that). That caps `server.db` size, which caps each snapshot's size,
+which caps the bucket even under long retention. That work belongs in the
+[airmon](https://github.com/utoker/airmon) repo, not here.
 
 **To set the rule:**
 

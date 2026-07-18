@@ -24,7 +24,7 @@
 # is encrypted before it touches $BACKUPS, so plaintext secrets never enter the
 # offsite-mirrored dir. The passphrase is not inside the tarball on purpose
 # (bootstrap paradox: you need it to decrypt everything else). See
-# docs/recovery.md §6b.
+# docs/recovery.md section 6.3.
 
 set -euo pipefail
 
@@ -46,10 +46,21 @@ echo "== sqlite airmon =="
 # already durable in server.db. Backing it up was ~40% of nightly R2 volume
 # for zero unique bytes. On rebuild, the agent recreates an empty buffer.db
 # on first start.
+#
+# Snapshot -> gzip -> atomic rename. Measured 2.6x on server.db, and this is
+# the largest object in the run. The raw sqlite dump is written to a
+# dot-hidden path so if we crash between .backup and gzip, rclone's
+# --exclude='.*' guarantees the plaintext snapshot cannot mirror offsite.
 for db in server.db; do
     src=/srv/data/airmon/$db
     [[ -f $src ]] || continue
-    sqlite3 "$src" ".backup '$BACKUPS/${db%.db}-$STAMP.db'"
+    stem=${db%.db}
+    out=$BACKUPS/$stem-$STAMP.db.gz
+    raw=$BACKUPS/.$stem-$STAMP.db.raw
+    sqlite3 "$src" ".backup '$raw'"
+    gzip -c "$raw" > "$out.partial"
+    rm -f "$raw"
+    mv "$out.partial" "$out"
 done
 
 if [[ -r $SECRETS_PASSPHRASE_FILE ]]; then
@@ -78,12 +89,14 @@ if [[ -r $SECRETS_PASSPHRASE_FILE ]]; then
 else
     echo "== SKIPPING secrets tarball: $SECRETS_PASSPHRASE_FILE not readable =="
     echo "   Create it (mode 0600, root:root) with a strong passphrase and save"
-    echo "   a copy to your password manager. See docs/recovery.md section 6b."
+    echo "   a copy to your password manager. See docs/recovery.md section 6.1."
 fi
 
 echo "== prune older than $KEEP_DAYS days =="
+# '*.db' matches pre-gzip legacy snapshots (2026-07-18 and earlier); newly-
+# written snapshots use '*.db.gz'. Both share the same 14-day rolling window.
 find "$BACKUPS" -maxdepth 1 -type f \
-    \( -name '*.sql.gz' -o -name '*.db' -o -name '*.tar.gz.gpg' \) \
+    \( -name '*.sql.gz' -o -name '*.db' -o -name '*.db.gz' -o -name '*.tar.gz.gpg' \) \
     -mtime "+$KEEP_DAYS" -print -delete
 
 if [[ -n ${REMOTE_BACKUP_TARGET:-} ]]; then
