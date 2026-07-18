@@ -27,7 +27,34 @@ apt-get install -y --no-install-recommends \
     caddy \
     postgresql-17 \
     redis-server \
-    sqlite3 rclone
+    sqlite3
+
+log "rclone from official .deb (Debian's 1.60.1 breaks against R2)"
+# Debian trixie's rclone 1.60.1 issues a post-upload HEAD with ?versionId=,
+# which R2 answers with 501 NotImplemented. 1.74+ drops that call. We install
+# the official static .deb and pin the Debian package out of the way so a
+# future `apt install --reinstall rclone` or unrelated upgrade can't
+# downgrade us back into breakage.
+RCLONE_MIN=1.74
+rclone_installed=$(rclone version 2>/dev/null | awk 'NR==1{sub(/^v/,"",$2); print $2}' || true)
+need_rclone=1
+if [[ -n $rclone_installed ]]; then
+    if dpkg --compare-versions "$rclone_installed" ge "$RCLONE_MIN"; then
+        need_rclone=0
+    fi
+fi
+if [[ $need_rclone -eq 1 ]]; then
+    arch=$(dpkg --print-architecture)
+    tmp=$(mktemp -d)
+    curl -fsSL -o "$tmp/rclone.deb" "https://downloads.rclone.org/rclone-current-linux-${arch}.deb"
+    dpkg -i "$tmp/rclone.deb"
+    rm -rf "$tmp"
+fi
+install -m 0644 /dev/stdin /etc/apt/preferences.d/rclone <<'EOF'
+Package: rclone
+Pin: origin deb.debian.org
+Pin-Priority: -1
+EOF
 
 log "Node.js 22 via nodesource (Debian Trixie ships 20, pnpm >= 10 needs 22)"
 if ! node --version 2>/dev/null | grep -q '^v22'; then

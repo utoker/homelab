@@ -7,11 +7,16 @@
 # equivalent) lifecycle rule if you want the remote to prune too.
 #
 # Expected /etc/homelab/backup.env when driven by homelab-backup.service:
-#     REMOTE_BACKUP_TARGET=r2:coldtrace-pi-backups/nightly
+#     REMOTE_BACKUP_TARGET=r2:homelab-pi-backups/nightly
 #     RCLONE_CONFIG=/root/.config/rclone/rclone.conf
 #     # optional overrides:
 #     # BACKUPS=/srv/data/backups
 #     # KEEP_DAYS=14
+#
+# rclone version pin: needs >= 1.74. Debian trixie ships 1.60.1, which throws
+# 501 NotImplemented against R2 (post-upload HEAD with ?versionId= that R2
+# does not support). bootstrap-pi.sh installs the official .deb; do not
+# `apt install rclone`.
 
 set -euo pipefail
 

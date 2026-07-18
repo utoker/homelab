@@ -76,8 +76,39 @@ git clone https://github.com/utoker/coldtrace ~/coldtrace
 
 ## 6. Secrets
 
-Recreate `/etc/homelab/porkbun.env` from your password manager
-(see [docs/dns.md](dns.md)) and enable the DDNS timer.
+Recreate the following from your password manager, `mode 0600`, owner `root`:
+
+- `/etc/homelab/cloudflare.env` — Cloudflare API token + zone/record IDs
+  (see [docs/dns.md](dns.md)); enable the DDNS timer once in place.
+- `/etc/homelab/backup.env` — nightly backup config:
+  ```
+  REMOTE_BACKUP_TARGET=r2:homelab-pi-backups/nightly
+  RCLONE_CONFIG=/root/.config/rclone/rclone.conf
+  ```
+- `/root/.config/rclone/rclone.conf` — R2 credentials for the `r2` remote.
+  Verify with `rclone lsd r2:` and `rclone check <local> r2:homelab-pi-backups/`.
+
+## 6a. rclone lives outside the Debian archive
+
+`bootstrap-pi.sh` installs `rclone` from the official static .deb at
+`downloads.rclone.org`, not `apt install rclone`. Reason: Debian trixie ships
+rclone 1.60.1, which throws `501 NotImplemented` on R2 because it issues a
+post-upload HEAD with `?versionId=` and R2 does not implement object
+versioning. 1.74+ removes the extra call.
+
+Bootstrap also drops `/etc/apt/preferences.d/rclone` pinning the Debian package
+to `-1`, so a stray `apt install --reinstall rclone` cannot silently downgrade
+to the broken version. If you ever need to bump rclone by hand:
+
+```bash
+arch=$(dpkg --print-architecture)
+curl -fsSLO "https://downloads.rclone.org/rclone-current-linux-${arch}.deb"
+sudo dpkg -i "rclone-current-linux-${arch}.deb"
+```
+
+Do NOT add `no_head = true` to `rclone.conf` to work around the 1.60 bug — it
+disables post-upload integrity verification, which is the only check we get on
+the offsite copy.
 
 ## 7. Certs + DNS
 
