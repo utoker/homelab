@@ -3,8 +3,9 @@
 #
 # Local snapshots land in $BACKUPS (14-day rolling prune). If REMOTE_BACKUP_TARGET
 # is set, files are copied (not synced) to that rclone remote after each run, so
-# the offsite copy accumulates independently of the local prune. Set an R2 (or
-# equivalent) lifecycle rule if you want the remote to prune too.
+# the offsite copy accumulates independently of the local prune. The bucket
+# MUST have its own lifecycle expiry rule (30-90 days) or it grows unbounded --
+# nothing in this script deletes remote objects. See docs/recovery.md section 6b.
 #
 # Expected /etc/homelab/backup.env when driven by homelab-backup.service:
 #     REMOTE_BACKUP_TARGET=r2:homelab-pi-backups/nightly
@@ -39,8 +40,13 @@ sudo -u postgres pg_dump --clean --if-exists coldtrace \
     | gzip > "$BACKUPS/coldtrace-$STAMP.sql.gz"
 
 echo "== sqlite airmon =="
-# online .backup gives a consistent snapshot without stopping the app
-for db in server.db buffer.db; do
+# online .backup gives a consistent snapshot without stopping the app.
+# buffer.db is deliberately NOT backed up: it is the agent's offline queue,
+# every row is marked sent=1 once the server 2xx's, and those same rows are
+# already durable in server.db. Backing it up was ~40% of nightly R2 volume
+# for zero unique bytes. On rebuild, the agent recreates an empty buffer.db
+# on first start.
+for db in server.db; do
     src=/srv/data/airmon/$db
     [[ -f $src ]] || continue
     sqlite3 "$src" ".backup '$BACKUPS/${db%.db}-$STAMP.db'"

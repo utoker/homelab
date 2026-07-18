@@ -60,9 +60,10 @@ Otherwise (fresh SSD):
 # format + mount per docs/ssd.md
 # restore Postgres from the most recent backup:
 gunzip -c /path/to/coldtrace-<stamp>.sql.gz | sudo -u postgres psql -d coldtrace
-# restore airmon SQLite:
+# restore airmon SQLite (server.db only; buffer.db is not backed up because it
+# is the agent's offline queue and every row is already durable in server.db --
+# the agent recreates it empty on first start):
 cp /path/to/server-<stamp>.db /srv/data/airmon/server.db
-cp /path/to/buffer-<stamp>.db /srv/data/airmon/buffer.db
 sudo chown -R umut:umut /srv/data/airmon
 ```
 
@@ -182,6 +183,45 @@ sudo dpkg -i "rclone-current-linux-${arch}.deb"
 Do NOT add `no_head = true` to `rclone.conf` to work around the 1.60 bug — it
 disables post-upload integrity verification, which is the only check we get on
 the offsite copy.
+
+## 6b. R2 lifecycle rule (bucket-side, not in this repo)
+
+`backup.sh` uses `rclone copy` deliberately so a local prune cannot cascade to
+the offsite copy. That means the bucket grows unbounded unless R2 itself is
+told to expire objects. Nothing in this repo does that; it is an operator
+step in the Cloudflare dashboard.
+
+**Sizing math (measured 2026-07-18):**
+
+- Today's nightly snapshot: pg_dump ~505 KB + server.db ~16 MB + secrets
+  ~10 KB ≈ **17 MB**.
+- server.db grows ~7.6 MB/day (16k readings/day at ~470 B/row plus SQLite
+  overhead), so tomorrow's snapshot is slightly bigger than today's.
+- With no lifecycle rule, bucket size after N days is
+  `sum(17 + 7.6·i for i in 0..N)` ≈ `3.8·N²` MB. That crosses the 10 GB free
+  tier at **day 51** and hits **~510 GB at year 1**. Not sustainable.
+- With an N-day lifecycle rule, the bucket instead holds N snapshots whose
+  sizes drift up over time. At year 1 (day 365) a 30-day rule holds ~80 GB,
+  a 90-day rule ~220 GB. Both are outside the free tier at 1 year
+  (~$1.20/mo and ~$3.30/mo respectively), but growth becomes linear in time
+  rather than quadratic, which is the point of doing this at all.
+- A truly-bounded bucket would need either row-level TTL on the source DB
+  or delta/incremental backups. Out of scope for now.
+
+**To set the rule:**
+
+1. Cloudflare dashboard → **R2** → `homelab-pi-backups` → **Settings** →
+   **Object lifecycle rules** → **Add rule**.
+2. Prefix: `nightly/` (scope the rule so it never touches anything else you
+   might one day put in this bucket).
+3. Action: **Delete objects** after **N days** (30 to 90 is reasonable; 60
+   is a good default and covers a full quarter of "did last month's data
+   look normal" investigations).
+4. Save. R2 starts expiring on the next scan (typically within 24 h).
+
+Verify the rule fired with `rclone size r2:homelab-pi-backups/nightly` a
+week or two later; the value should oscillate around a plateau rather than
+climb monotonically.
 
 ## 7. Certs + DNS
 
