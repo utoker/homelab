@@ -20,9 +20,12 @@ before=$(psql_q "SELECT COUNT(*) FROM readings;")
 echo "== coldtrace retention: keeping ${KEEP_DAYS} days =="
 echo "readings before: $before"
 
+# readings.timestamp is `timestamp WITHOUT time zone` holding UTC, while NOW()
+# returns local time. Comparing them directly is off by the UTC offset (4h in
+# EDT), so normalize NOW() to UTC first.
 deleted=$(psql_q "WITH d AS (
     DELETE FROM readings
-    WHERE timestamp < NOW() - INTERVAL '${KEEP_DAYS} days'
+    WHERE timestamp < (NOW() AT TIME ZONE 'UTC') - INTERVAL '${KEEP_DAYS} days'
     RETURNING 1
 ) SELECT COUNT(*) FROM d;")
 echo "deleted: $deleted"
