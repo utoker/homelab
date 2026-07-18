@@ -11,7 +11,11 @@ Group=umut
 Environment=AIRMON_BUFFER_DB=/srv/data/airmon/buffer.db
 Environment=AIRMON_DB_PATH=/srv/data/airmon/server.db
 Environment=AIRMON_BUFFER_RETENTION_DAYS=7
-Environment=AIRMON_SERVER_RETENTION_DAYS=30
+# Readings are kept indefinitely until tiered downsampling lands. 30 days would
+# have started deleting July data in mid-August; raw growth is only 4.5 MB/day
+# (1.6 GB/year) on a 458 GB disk, so holding everything is affordable in the
+# meantime. Downsampling replaces this with raw/minute/hour tiers.
+Environment=AIRMON_SERVER_RETENTION_DAYS=3650
 # cwd is set for the server ExecStart's `-m app.maintenance`; the pi
 # ExecStart uses absolute paths and does not depend on cwd.
 WorkingDirectory=/home/umut/airmon-server
