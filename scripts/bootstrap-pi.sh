@@ -26,7 +26,8 @@ apt-get install -y --no-install-recommends \
     ufw fail2ban unattended-upgrades \
     caddy \
     postgresql-17 \
-    redis-server
+    redis-server \
+    sqlite3 rclone
 
 log "Node.js 22 via nodesource (Debian Trixie ships 20, pnpm >= 10 needs 22)"
 if ! node --version 2>/dev/null | grep -q '^v22'; then
@@ -86,12 +87,15 @@ cat <<EOF
 
 Bootstrap done. Next:
   1. Attach the USB SSD; follow docs/ssd.md.
-  2. Create /etc/homelab/porkbun.env (see docs/dns.md), then:
+  2. Create /etc/homelab/cloudflare.env (see docs/dns.md), then:
        systemctl enable --now homelab-ddns.timer
   3. Deploy each app (see docs/recovery.md), then:
        systemctl enable --now airmon-server airmon-agent
        systemctl enable --now coldtrace-backend
-  4. Add DNS A records at Porkbun, then:
+  4. Add DNS A records in Cloudflare, then:
        systemctl reload caddy    # certs auto-issued on first request
+  5. Configure rclone remote for offsite backups (see backup.sh header),
+     drop REMOTE_BACKUP_TARGET into /etc/homelab/backup.env, then:
+       systemctl enable --now homelab-backup.timer
 
 EOF
