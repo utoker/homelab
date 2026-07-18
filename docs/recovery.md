@@ -29,7 +29,7 @@ ssh airmon
 
 - The three sensors (see the airmon repo's CLAUDE.md wiring table).
 - The USB SSD (do NOT format yet if you want to keep old data — mount and confirm
-  `/mnt/ssd/*` contents look right).
+  `/srv/data/*` contents look right).
 
 ## 3. Bootstrap
 
@@ -49,9 +49,9 @@ Otherwise (fresh SSD):
 # restore Postgres from the most recent backup:
 gunzip -c /path/to/coldtrace-<stamp>.sql.gz | sudo -u postgres psql -d coldtrace
 # restore airmon SQLite:
-cp /path/to/server-<stamp>.db /mnt/ssd/airmon-data/server.db
-cp /path/to/buffer-<stamp>.db /mnt/ssd/airmon-data/buffer.db
-sudo chown -R umut:umut /mnt/ssd/airmon-data
+cp /path/to/server-<stamp>.db /srv/data/airmon/server.db
+cp /path/to/buffer-<stamp>.db /srv/data/airmon/buffer.db
+sudo chown -R umut:umut /srv/data/airmon
 ```
 
 ## 5. Clone and set up each app

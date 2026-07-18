@@ -44,9 +44,9 @@ Two apps are served publicly with HTTPS from the Pi:
    │  redis-server.service                               │
    │  homelab-ddns.timer         Cloudflare DDNS every 5 min│
    │                                                     │
-   │  /mnt/ssd/postgres/         Postgres data           │
-   │  /mnt/ssd/airmon-data/      SQLite (buffer + server)│
-   │  /mnt/ssd/backups/          nightly dumps           │
+   │  /srv/data/postgresql/      Postgres data           │
+   │  /srv/data/airmon/          SQLite (buffer + server)│
+   │  /srv/data/backups/         nightly dumps           │
    │                                                     │
    └─────────────────────────────────────────────────────┘
 ```

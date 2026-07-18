@@ -111,7 +111,7 @@ check query logs.
 admin password). Include in the nightly backup script or copy it after any config
 change:
 ```bash
-sudo cp /opt/AdGuardHome/AdGuardHome.yaml /mnt/ssd/backups/adguard-$(date -Iseconds).yaml
+sudo cp /opt/AdGuardHome/AdGuardHome.yaml /srv/data/backups/adguard-$(date -Iseconds).yaml
 ```
 
 On rebuild: reinstall AdGuard via the same installer script, stop the service,
