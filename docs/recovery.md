@@ -4,10 +4,22 @@ If the SD card dies or someone rebuilds the Pi, this is the recovery order.
 
 ## 0. Prerequisites off-Pi
 
-- A recent backup somewhere reachable (see `scripts/backup.sh`; ideally rsync'd off
-  the Pi to another host or an S3 bucket).
-- Porkbun API keys in your password manager.
-- SSH pubkey ready to push to the fresh Pi.
+Everything below assumes you can reach the last-good backup AND that these
+values are in your password manager (they are the ones NOT in git and NOT
+inside the encrypted archive):
+
+- **R2 credentials** — access key id + secret for the `homelab-pi-backups`
+  bucket. Without these you cannot even pull the backup down.
+- **Secrets-archive passphrase** — the content of `/etc/homelab/backup-passphrase`
+  on the old Pi. Without this the archive is unopenable and everything else
+  (Cloudflare token, rclone config, coldtrace `.env`, caddy certs) is lost.
+- **Cloudflare account login** — you'll issue a new API token if the old one
+  ever leaked; the DNS zone stays.
+- **SSH pubkey** ready to push to the fresh Pi.
+
+The archive is for **speed** of rebuild, not for the credentials that start it.
+Both bullets above must come out of the password manager before rclone can pull
+a single byte.
 
 ## 1. Fresh Pi OS install
 
@@ -74,19 +86,80 @@ git clone https://github.com/utoker/coldtrace ~/coldtrace
 ~/homelab/scripts/deploy-coldtrace.sh
 ```
 
-## 6. Secrets
+## 6. Secrets: hand-place the passphrase, then decrypt the rest
 
-Recreate the following from your password manager, `mode 0600`, owner `root`:
+There are two tiers of secrets. The first tier lives ONLY in your password
+manager and is what you need to bootstrap; the second tier lives inside the
+encrypted archive and is what you need for the apps to run.
 
-- `/etc/homelab/cloudflare.env` — Cloudflare API token + zone/record IDs
-  (see [docs/dns.md](dns.md)); enable the DDNS timer once in place.
-- `/etc/homelab/backup.env` — nightly backup config:
-  ```
-  REMOTE_BACKUP_TARGET=r2:homelab-pi-backups/nightly
-  RCLONE_CONFIG=/root/.config/rclone/rclone.conf
-  ```
-- `/root/.config/rclone/rclone.conf` — R2 credentials for the `r2` remote.
-  Verify with `rclone lsd r2:` and `rclone check <local> r2:homelab-pi-backups/`.
+### 6.1 Tier one: hand-place from the password manager
+
+```bash
+# The passphrase. Everything else is downstream of this file.
+sudo install -m 0600 -o root -g root /dev/stdin /etc/homelab/backup-passphrase \
+    <<< 'paste-passphrase-from-password-manager'
+
+# rclone.conf with the R2 access key + secret for the homelab-pi-backups bucket.
+# Bootstrap doesn't ship this; you paste it in the same way.
+sudo install -d -m 0700 -o root -g root /root/.config/rclone
+sudo install -m 0600 -o root -g root /dev/stdin /root/.config/rclone/rclone.conf <<'EOF'
+[r2]
+type = s3
+provider = Cloudflare
+access_key_id = ...
+secret_access_key = ...
+endpoint = https://<account_id>.r2.cloudflarestorage.com
+EOF
+
+# backup.env (small, no secrets — but no reason not to keep it here for symmetry).
+sudo install -m 0600 -o root -g root /dev/stdin /etc/homelab/backup.env <<'EOF'
+REMOTE_BACKUP_TARGET=r2:homelab-pi-backups/nightly
+RCLONE_CONFIG=/root/.config/rclone/rclone.conf
+EOF
+
+# Confirm R2 is reachable before you try to pull anything.
+sudo RCLONE_CONFIG=/root/.config/rclone/rclone.conf rclone lsd r2:
+```
+
+### 6.2 Tier two: pull + decrypt the archive
+
+```bash
+# Pull the newest secrets archive locally.
+sudo mkdir -p /srv/data/backups
+NEWEST=$(sudo RCLONE_CONFIG=/root/.config/rclone/rclone.conf \
+    rclone lsf r2:homelab-pi-backups/nightly/ --include 'secrets-*.tar.gz.gpg' \
+    | sort | tail -1)
+sudo RCLONE_CONFIG=/root/.config/rclone/rclone.conf \
+    rclone copy "r2:homelab-pi-backups/nightly/$NEWEST" /srv/data/backups/
+
+# Decrypt straight to /, restoring absolute paths inside the tarball.
+# tar preserves ownership by numeric UID/GID from the source Pi; on a fresh
+# install those may not match. Chown the caddy tree after extraction.
+sudo sh -c "gpg --batch --quiet --decrypt \
+    --passphrase-file /etc/homelab/backup-passphrase \
+    /srv/data/backups/$NEWEST \
+  | tar xzf - -C /"
+sudo chown -R caddy:caddy /var/lib/caddy
+```
+
+You now have `cloudflare.env`, `coldtrace/apps/backend/.env`, the coldtrace DB
+password, and the caddy ACME state (certs + private keys — no LE round-trip
+needed at first boot). Enable the DDNS timer once `cloudflare.env` is in place.
+
+### 6.3 Bootstrap paradox
+
+The passphrase file is inside `/etc/homelab/` but its content is NOT inside the
+archive it protects. That is deliberate. If the passphrase lived in the
+archive, you would need to already have the plaintext passphrase to obtain the
+encrypted copy of the passphrase, which is not a useful improvement over
+storing it in your password manager to begin with. So we store it in the
+password manager exactly once. The R2 credentials get the same treatment for
+the same reason: you need them to pull the archive that contains everything
+else.
+
+Rule of thumb: anything you need to bootstrap the rebuild lives in the
+password manager. Anything you need for the running system lives in the
+encrypted archive.
 
 ## 6a. rclone lives outside the Debian archive
 

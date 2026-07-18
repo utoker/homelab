@@ -124,5 +124,8 @@ Bootstrap done. Next:
   5. Configure rclone remote for offsite backups (see backup.sh header),
      drop REMOTE_BACKUP_TARGET into /etc/homelab/backup.env, then:
        systemctl enable --now homelab-backup.timer
+  6. Place /etc/homelab/backup-passphrase (mode 0600, root:root) with the
+     passphrase from your password manager. Without it the secrets tarball
+     step in backup.sh is skipped. See docs/recovery.md section 6.
 
 EOF
