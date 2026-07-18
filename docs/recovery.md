@@ -69,19 +69,26 @@ sudo chown -R umut:umut /srv/data/airmon
 
 ## 5. Clone and set up each app
 
+The airmon repo is public, so no credential is needed to clone it. The layout
+splits git-source from runtime homes on purpose: `deploy-airmon.sh` rsyncs
+`pi/`, `server/`, and `web/dist/` from `~/airmon-repo` into `~/airmon`,
+`~/airmon-server`, and `~/airmon-web` respectively. The git checkout must
+NOT be at `~/airmon`, because that path is a rsync target and would be erased.
+
 ```bash
-# airmon
+# airmon (public repo, no auth needed)
 git clone https://github.com/utoker/airmon ~/airmon-repo
 mkdir -p ~/airmon ~/airmon-server ~/airmon-web
-# create venvs
+# create venvs at their runtime locations
 python3 -m venv ~/airmon/.venv
 ~/airmon/.venv/bin/pip install -r ~/airmon-repo/pi/requirements.txt
 python3 -m venv ~/airmon-server/.venv
 ~/airmon-server/.venv/bin/pip install -r ~/airmon-repo/server/requirements.txt
-# first deploy populates ~/airmon, ~/airmon-server, ~/airmon-web from the repo
+# first deploy populates ~/airmon, ~/airmon-server, ~/airmon-web from the checkout.
+# deploy-airmon.sh defaults AIRMON_REPO=~/airmon-repo; override if you cloned elsewhere.
 ~/homelab/scripts/deploy-airmon.sh
 
-# coldtrace
+# coldtrace (public repo; deploy runs in-place from the checkout)
 git clone https://github.com/utoker/coldtrace ~/coldtrace
 # create ~/coldtrace/apps/backend/.env from your password manager
 ~/homelab/scripts/deploy-coldtrace.sh
@@ -184,70 +191,97 @@ Do NOT add `no_head = true` to `rclone.conf` to work around the 1.60 bug — it
 disables post-upload integrity verification, which is the only check we get on
 the offsite copy.
 
-## 6b. R2 lifecycle rule (bucket-side, not in this repo)
+## 6b. R2 lifecycle rules (bucket-side, not in this repo)
 
 `backup.sh` uses `rclone copy` deliberately so a local prune cannot cascade to
-the offsite copy. That means the bucket grows unbounded unless R2 itself is
-told to expire objects. Nothing in this repo does that; it is an operator
-step in the Cloudflare dashboard.
+the offsite copy. Object expiry is handled by R2 lifecycle rules configured
+in the Cloudflare dashboard, not by anything in this repo.
 
-**Sizing math (measured 2026-07-18, post-gzip):**
+**Rules currently in place on `homelab-pi-backups` (both under prefix `nightly/`):**
 
-- `server.db` alone: **16.8 MB** uncompressed, gzips to **6.5 MB** (2.6×).
-  Grows **~4.5 MB/day** (~17k readings/day at ~260 B/row after SQLite
-  overhead, from 64,519 rows collected over 3.74 days). Backup pipeline
-  gzips before write, so tomorrow's `server-*.db.gz` is a bit larger than
-  today's.
-- `coldtrace-*.sql.gz` ~505 KB, `secrets-*.tar.gz.gpg` ~10 KB. Both small
-  and roughly constant relative to the SQLite snapshot.
-- Today's total nightly snapshot on R2: **~7 MB**. Snapshot on day `i`:
-  ≈ `7 + 1.73·i` MB (that's the daily server-DB growth of 4.5 MB divided
-  by the 2.6× gzip ratio).
+| Rule name              | Prefix               | Delete after |
+| ---------------------- | -------------------- | ------------ |
+| `expire-server-db`     | `nightly/server-`    | 30 days      |
+| `expire-coldtrace-dumps` | `nightly/coldtrace-` | 30 days      |
 
-**Without a lifecycle rule** — bucket accumulates every snapshot forever,
-size ≈ `7·N + 0.87·N²` MB:
+**No rule may ever match `secrets-`.** The encrypted secrets archive is the
+only offsite copy of the backup passphrase's downstream secrets (rclone.conf,
+cloudflare.env, coldtrace `.env`, caddy ACME state). Delete those objects and
+a fresh-Pi rebuild becomes impossible even with the password manager. The
+per-prefix rules above are scoped narrowly so a future prefix change on
+snapshot filenames cannot accidentally start pruning secrets. If you ever add
+a new artifact type, add a matching narrow rule; do not broaden either
+existing rule to `nightly/`.
 
-| Age    | Bucket   |
-| ------ | -------- |
-| 30 d   | ~1 GB    |
-| 90 d   | ~7.7 GB  |
-| ~105 d | ~10 GB (crosses free tier) |
-| 1 yr   | ~115 GB  |
+**Sizing after tiered downsampling (shipped 2026-07-18):**
 
-**With an N-day lifecycle rule** at year 1 (D = 365):
+Airmon now aggregates raw 5s samples into per-minute buckets after 14 days
+and per-hour buckets after 90 days, keeping hour rows forever. Hour storage
+is ~2.3 MB/year, so `server.db` settles near **100 MB** rather than growing
+without bound. Concretely:
 
-| Rule   | Bucket @ 1 yr | Paid GB (over 10 GB free) | Monthly cost @ $0.015/GB-mo |
-| ------ | ------------- | ------------------------- | --------------------------- |
-| 14 d   | ~8.6 GB       | 0                         | free                        |
-| 30 d   | ~18 GB        | ~8 GB                     | ~$0.12                      |
-| 60 d   | ~34 GB        | ~24 GB                    | ~$0.36                      |
-| 90 d   | ~50 GB        | ~40 GB                    | ~$0.60                      |
+- `server.db` gzipped snapshot settles at ~40 MB (worst case ~100 MB).
+- `coldtrace-*.sql.gz` ~0.5 MB, capped further by coldtrace's own 180-day
+  retention (see below).
+- `secrets-*.tar.gz.gpg` ~10 KB.
 
-**Retention alone does not bound cost.** Each snapshot in the window itself
-grows ~1.73 MB/day (post-gzip), so under any fixed retention the bucket
-still grows linearly with calendar time. Year 5 with a 90-day rule is
-~280 GB, ~$4/mo.
+With snapshots effectively bounded, a 30-day retention window keeps the
+bucket well under the R2 10 GB free tier indefinitely. The lifecycle rules
+are a **safety net** against accidental accumulation, not a load-bearing
+cost control. Do not tighten them without also tightening the
+`AIRMON_TIER_RAW_DAYS` / `AIRMON_TIER_MINUTE_DAYS` values that determine
+snapshot size; the two are related.
 
-The real long-term fix is source-side: **downsample old airmon readings**
-(e.g. keep raw for 30 days, then 5-min averages for a year, then hourly
-after that). That caps `server.db` size, which caps each snapshot's size,
-which caps the bucket even under long retention. That work belongs in the
-[airmon](https://github.com/utoker/airmon) repo, not here.
+Verify the bucket's steady state with `rclone size r2:homelab-pi-backups/nightly`
+a month or two after any config change; the value should oscillate around a
+plateau rather than climb monotonically.
 
-**To set the rule:**
+## 6c. Retention on the Pi itself
 
-1. Cloudflare dashboard → **R2** → `homelab-pi-backups` → **Settings** →
-   **Object lifecycle rules** → **Add rule**.
-2. Prefix: `nightly/` (scope the rule so it never touches anything else you
-   might one day put in this bucket).
-3. Action: **Delete objects** after **N days** (30 to 90 is reasonable; 60
-   is a good default and covers a full quarter of "did last month's data
-   look normal" investigations).
-4. Save. R2 starts expiring on the next scan (typically within 24 h).
+Two systemd timers prune persistent data on the Pi so its databases stay a
+predictable size. Both are installed by `bootstrap-pi.sh` and defined in the
+[systemd/](../systemd/) directory here.
 
-Verify the rule fired with `rclone size r2:homelab-pi-backups/nightly` a
-week or two later; the value should oscillate around a plateau rather than
-climb monotonically.
+**`airmon-maintenance.timer` (daily at 03:45 local, `RandomizedDelaySec=15min`)**
+
+Runs `pi/maintenance.py` followed by `server/app/maintenance.py`. Env vars set
+by [systemd/airmon-maintenance.service](../systemd/airmon-maintenance.service):
+
+- `AIRMON_BUFFER_RETENTION_DAYS=7`: Pi-side `buffer.db` drops rows with
+  `sent=1` older than this. Rows still marked `sent=0` are never touched;
+  they are the only durable copy while offline.
+- `AIRMON_TIER_RAW_DAYS=14`: server-side `readings` table (raw 5s samples).
+- `AIRMON_TIER_MINUTE_DAYS=90`: server-side `readings_minute` table.
+- Hour rows in `readings_hour` are kept forever.
+
+Order of operations on the server: roll up first (needs raw rows present),
+verify a random sample of aggregate rows against a fresh raw query, then
+prune raw rows past the raw cutoff, then prune minute rows past the minute
+cutoff, then `VACUUM`. Rollup and pruning are separate transactions, so a
+partial run never destroys rows that have not been aggregated yet. If any
+verification sample fails, the run refuses to prune.
+
+Restoring from a `server-*.db.gz` snapshot restores all three tables in a
+single file. Depending on the snapshot's age, some readings will exist only
+as minute or hour aggregates: raw rows beyond 14 days pre-snapshot are gone
+by design, and minute rows beyond 90 days are gone as well. The web UI's
+time-range picker already knows which tier to query for a given range, so a
+freshly restored DB works immediately without a rebuild step.
+
+**`coldtrace-maintenance.timer` (daily at 04:15 local, `RandomizedDelaySec=15min`)**
+
+Runs [scripts/coldtrace-retention.sh](../scripts/coldtrace-retention.sh),
+which deletes `readings` older than `KEEP_DAYS` (default **180**, override
+via `/etc/homelab/coldtrace-retention.env`) and then runs plain `VACUUM
+(ANALYZE)`. `VACUUM FULL` is deliberately avoided: it rewrites the whole
+table and holds an exclusive lock; plain `VACUUM` marks pages reusable
+without blocking writers so the table converges to a steady size.
+
+**`alerts` are never pruned.** They are the excursion history, they are
+tiny, and `alerts.deviceId` references `devices`, not `readings`, so
+pruning readings cannot cascade into alerts. Deleting alerts would erase
+the record of every out-of-spec event, which is the whole reason coldtrace
+exists.
 
 ## 7. Certs + DNS
 

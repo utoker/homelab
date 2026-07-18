@@ -1,8 +1,12 @@
 # USB SSD: mount and move persistent data
 
 The Pi's SD card is fine for the OS but Postgres will destroy it in 12-24 months of
-continuous writes. A cheap USB3 SATA SSD (~$25 for 240 GB) fixes that completely and
-also improves I/O for airmon's SQLite. Do this before enabling Postgres or Redis.
+continuous writes. A USB3 SATA SSD fixes that completely and also improves I/O for
+airmon's SQLite. Do this before enabling Postgres or Redis.
+
+Current disk: **Samsung 860 EVO 500 GB** (465.8 GiB usable, single GPT partition,
+label `airmon-data`, mounted at `/srv/data`). Any modern USB3 SSD of similar size
+would work identically; the walkthrough below does not assume this specific model.
 
 Everything the Pi persists lives under a single mount point, `/srv/data`:
 
@@ -19,7 +23,7 @@ Plug the SSD into a **USB3 (blue) port** on the Pi. Confirm the kernel sees it:
 
 ```bash
 lsblk
-# expect a /dev/sda entry ~240 GB with no mount
+# expect a /dev/sda entry the size of your disk, with no mount
 dmesg | tail -20
 ```
 

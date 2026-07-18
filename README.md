@@ -38,15 +38,19 @@ Two apps are served publicly with HTTPS from the Pi:
    │    api.coldtrace.app  → 127.0.0.1:4000              │
    │                                                     │
    │  airmon-agent.service       samples every 5 s       │
-   │  airmon-server.service      uvicorn :8000           │
+   │  airmon-server.service      uvicorn :8000 (API + SPA)│
    │  coldtrace-backend.service  apollo :4000            │
    │  postgresql@17-main.service data on SSD             │
    │  redis-server.service                               │
+   │  AdGuardHome.service        LAN split-horizon DNS   │
    │  homelab-ddns.timer         Cloudflare DDNS every 5 min│
+   │  homelab-backup.timer       nightly 03:15, mirrors to R2│
+   │  airmon-maintenance.timer   daily 03:45, tiered downsample│
+   │  coldtrace-maintenance.timer daily 04:15, 180-day prune│
    │                                                     │
    │  /srv/data/postgresql/      Postgres data           │
    │  /srv/data/airmon/          SQLite (buffer + server)│
-   │  /srv/data/backups/         nightly dumps           │
+   │  /srv/data/backups/         nightly dumps (mirrored to R2)│
    │                                                     │
    └─────────────────────────────────────────────────────┘
 ```
@@ -66,8 +70,9 @@ homelab/
 
 - [docs/ssd.md](docs/ssd.md) — mount the USB SSD and relocate Postgres + SQLite onto it
 - [docs/dns.md](docs/dns.md) — Cloudflare DNS + orange-cloud proxy, DDNS setup
-- [docs/security.md](docs/security.md) — ufw, fail2ban, unattended-upgrades
-- [docs/recovery.md](docs/recovery.md) — rebuild the Pi from scratch
+- [docs/dns-lan.md](docs/dns-lan.md) — AdGuard Home split-horizon DNS on the LAN
+- [docs/security.md](docs/security.md) — ufw, fail2ban, unattended-upgrades, Cloudflare edge
+- [docs/recovery.md](docs/recovery.md) — rebuild the Pi from scratch, backups, R2 lifecycle, retention timers
 
 ## Secrets
 
@@ -89,5 +94,5 @@ Then follow [docs/ssd.md](docs/ssd.md) to attach the USB SSD and relocate data.
 
 ## Cost
 
-- **One-time:** ~$25 (240 GB USB3 SATA SSD).
+- **One-time:** USB3 SATA SSD (the current one is a 500 GB Samsung 860 EVO).
 - **Ongoing:** $0. Domains and Vercel free tier remain elsewhere.
