@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Nightly backup: pg_dump ColdTrace, snapshot airmon SQLite dbs.
-# Writes to /mnt/ssd/backups with 14-day retention. Optionally rsync
+# Writes to /srv/data/backups with 14-day retention. Optionally rsync
 # to a remote host if REMOTE_BACKUP_TARGET is set (rsync over SSH).
 
 set -euo pipefail
 
-BACKUPS=${BACKUPS:-/mnt/ssd/backups}
+BACKUPS=${BACKUPS:-/srv/data/backups}
 KEEP_DAYS=${KEEP_DAYS:-14}
 STAMP=$(date -u +%Y%m%dT%H%M%SZ)
 
@@ -18,7 +18,7 @@ sudo -u postgres pg_dump --clean --if-exists coldtrace \
 echo "== sqlite airmon =="
 # online .backup gives a consistent snapshot without stopping the app
 for db in server.db buffer.db; do
-    src=/mnt/ssd/airmon-data/$db
+    src=/srv/data/airmon/$db
     [[ -f $src ]] || continue
     sqlite3 "$src" ".backup '$BACKUPS/${db%.db}-$STAMP.db'"
 done

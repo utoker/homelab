@@ -55,6 +55,15 @@ for unit in "$HOMELAB_DIR"/systemd/*.service "$HOMELAB_DIR"/systemd/*.timer; do
     [[ -e $unit ]] || continue
     install -m 0644 "$unit" /etc/systemd/system/
 done
+for dropin_dir in "$HOMELAB_DIR"/systemd/*.service.d; do
+    [[ -d $dropin_dir ]] || continue
+    dest=/etc/systemd/system/$(basename "$dropin_dir")
+    install -d -m 0755 "$dest"
+    for conf in "$dropin_dir"/*.conf; do
+        [[ -e $conf ]] || continue
+        install -m 0644 "$conf" "$dest/"
+    done
+done
 systemctl daemon-reload
 
 log "install Caddyfile"
