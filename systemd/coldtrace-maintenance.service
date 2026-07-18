@@ -1,0 +1,12 @@
+[Unit]
+Description=ColdTrace daily retention (prune readings older than 180 days)
+After=network-online.target postgresql@17-main.service
+Wants=postgresql@17-main.service
+RequiresMountsFor=/srv/data
+
+[Service]
+Type=oneshot
+User=root
+# Optional: set KEEP_DAYS to override the 180-day default.
+EnvironmentFile=-/etc/homelab/coldtrace-retention.env
+ExecStart=/opt/homelab/scripts/coldtrace-retention.sh
