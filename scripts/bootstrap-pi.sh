@@ -94,6 +94,11 @@ for dropin_dir in "$HOMELAB_DIR"/systemd/*.service.d; do
 done
 systemctl daemon-reload
 
+log "persistent journal (Pi OS defaults to volatile; see journald/)"
+install -d -m 0755 /etc/systemd/journald.conf.d
+install -m 0644 "$HOMELAB_DIR"/journald/*.conf /etc/systemd/journald.conf.d/
+systemctl restart systemd-journald
+
 log "install Caddyfile"
 install -m 0644 "$HOMELAB_DIR/caddy/Caddyfile" /etc/caddy/Caddyfile
 
@@ -127,5 +132,7 @@ Bootstrap done. Next:
   6. Place /etc/homelab/backup-passphrase (mode 0600, root:root) with the
      passphrase from your password manager. Without it the secrets tarball
      step in backup.sh is skipped. See docs/recovery.md section 6.
+  7. Create /etc/homelab/healthchecks.env (see docs/monitoring.md), then:
+       systemctl enable --now homelab-healthcheck.timer
 
 EOF

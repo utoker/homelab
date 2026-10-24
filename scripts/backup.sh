@@ -75,6 +75,7 @@ if [[ -r $SECRETS_PASSPHRASE_FILE ]]; then
         tar --create --gzip --ignore-failed-read --file - \
             /etc/homelab/cloudflare.env \
             /etc/homelab/backup.env \
+            /etc/homelab/healthchecks.env \
             /root/.config/rclone/rclone.conf \
             /home/umut/coldtrace/apps/backend/.env \
             /home/umut/.coldtrace-setup/db_password \

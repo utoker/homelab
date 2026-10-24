@@ -1,0 +1,10 @@
+[Unit]
+Description=Ping healthchecks.io if airmon is recording and publicly reachable
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+EnvironmentFile=/etc/homelab/healthchecks.env
+ExecStart=/opt/homelab/scripts/healthcheck.sh

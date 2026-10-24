@@ -62,7 +62,8 @@ homelab/
 ├── README.md              this file
 ├── caddy/Caddyfile        both hosts, reverse proxy
 ├── systemd/               all unit files, symlinked or copied to /etc/systemd/system/
-├── scripts/               deploy, backup, DDNS helpers
+├── journald/              drop-ins for /etc/systemd/journald.conf.d/ (persistent logs)
+├── scripts/               deploy, backup, DDNS, healthcheck helpers
 └── docs/                  step-by-step setup for each subsystem
 ```
 
@@ -73,12 +74,14 @@ homelab/
 - [docs/dns-lan.md](docs/dns-lan.md) — AdGuard Home split-horizon DNS on the LAN
 - [docs/security.md](docs/security.md) — ufw, fail2ban, unattended-upgrades, Cloudflare edge
 - [docs/recovery.md](docs/recovery.md) — rebuild the Pi from scratch, backups, R2 lifecycle, retention timers
+- [docs/monitoring.md](docs/monitoring.md) — healthchecks.io dead-man's switch, persistent logs, what to do when it alerts
 
 ## Secrets
 
 Never committed. Live on the Pi only, `mode 0600`, owner `root`:
 
 - `/etc/homelab/cloudflare.env` — Cloudflare API token + zone/record IDs for DDNS
+- `/etc/homelab/healthchecks.env` — healthchecks.io ping URL for the airmon check
 - `/home/umut/coldtrace/apps/backend/.env` — DB / Redis URLs, GraphQL secrets
 
 ## One-time bootstrap
