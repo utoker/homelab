@@ -20,9 +20,11 @@ before=$(psql_q "SELECT COUNT(*) FROM readings;")
 echo "== coldtrace retention: keeping ${KEEP_DAYS} days =="
 echo "readings before: $before"
 
-# readings.timestamp is `timestamp WITHOUT time zone` holding UTC, while NOW()
-# returns local time. Comparing them directly is off by the UTC offset (4h in
-# EDT), so normalize NOW() to UTC first.
+# readings.timestamp is `timestamp WITHOUT time zone` holding UTC. The DB now
+# has `ALTER DATABASE coldtrace SET timezone = 'UTC'`, so NOW() in a fresh
+# session already returns UTC and this AT TIME ZONE 'UTC' cast is redundant.
+# Kept as a belt-and-suspenders guard in case a future session inherits a
+# non-UTC timezone (e.g. from PGTZ or a per-role SET).
 deleted=$(psql_q "WITH d AS (
     DELETE FROM readings
     WHERE timestamp < (NOW() AT TIME ZONE 'UTC') - INTERVAL '${KEEP_DAYS} days'
