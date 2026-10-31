@@ -102,7 +102,7 @@ systemctl restart systemd-journald
 log "install Caddyfile"
 install -m 0644 "$HOMELAB_DIR/caddy/Caddyfile" /etc/caddy/Caddyfile
 
-log "ufw rules (SSH + Caddy public; DNS + AdGuard admin LAN-only)"
+log "ufw rules (SSH + Caddy public; DNS, AdGuard admin, purifier API LAN-only)"
 ufw default deny incoming >/dev/null
 ufw default allow outgoing >/dev/null
 ufw allow OpenSSH >/dev/null
@@ -110,6 +110,7 @@ ufw allow 80/tcp   comment 'Caddy HTTP + LE' >/dev/null
 ufw allow 443/tcp  comment 'Caddy HTTPS'     >/dev/null
 ufw allow from 192.168.1.0/24 to any port 53             comment 'AdGuard DNS (LAN only)'   >/dev/null
 ufw allow from 192.168.1.0/24 to any port 3000 proto tcp comment 'AdGuard admin (LAN only)' >/dev/null
+ufw allow from 192.168.1.0/24 to any port 8081 proto tcp comment 'airmon purifier API (LAN only)' >/dev/null
 ufw --force enable
 
 log "unattended-upgrades"

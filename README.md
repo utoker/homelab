@@ -36,6 +36,7 @@ Two apps are served publicly with HTTPS from the Pi:
    │  Caddy (reverse proxy + auto Let's Encrypt)         │
    │    airmon.utoker.com  → 127.0.0.1:8000              │
    │    api.coldtrace.app  → 127.0.0.1:4000              │
+   │    :8081 (LAN, HTTP)  → GET /api/purifier/* only    │
    │                                                     │
    │  airmon-agent.service       samples every 5 s       │
    │  airmon-server.service      uvicorn :8000 (API + SPA)│
@@ -60,7 +61,7 @@ Two apps are served publicly with HTTPS from the Pi:
 ```
 homelab/
 ├── README.md              this file
-├── caddy/Caddyfile        both hosts, reverse proxy
+├── caddy/Caddyfile        both hosts + LAN purifier listener, reverse proxy
 ├── systemd/               all unit files, symlinked or copied to /etc/systemd/system/
 ├── journald/              drop-ins for /etc/systemd/journald.conf.d/ (persistent logs)
 ├── scripts/               deploy, backup, DDNS, healthcheck helpers
