@@ -58,9 +58,27 @@ The Pi still runs its own Let's Encrypt certs behind Cloudflare (SSL/TLS mode
 is Full/strict), so a direct request to the origin IP would still get a valid
 cert. Cloudflare is a preference, not a hard dependency.
 
+## airmon's public site is read-only
+
+`https://airmon.utoker.com` answers `GET`/`HEAD` only under `/api`; any other
+method on `/api` or `/api/*` gets a 404 from Caddy before it reaches the app.
+The rule lives in the Caddyfile, so it applies whether the request comes
+through Cloudflare or straight to the origin IP.
+
+Why: `POST /api/readings` has no auth, and readings now drive the purifier
+fans (airmon phase 6), so anyone on the internet could have faked air quality
+and spun the fans up or down. Nothing legitimate writes through the public
+site. The Pi agent posts to `http://127.0.0.1:8000/api` directly
+(`AIRMON_SERVER_URL`), and the purifier ESP32s only `GET` via the LAN listener
+on 8081.
+
+If a new writer ever needs the public site, give it auth in the app first;
+don't loosen this rule.
+
 ## What we deliberately do NOT do
 
-- **No app-level auth on airmon.** User explicitly picked "public" for the dashboard.
+- **No app-level auth on airmon reads.** User explicitly picked "public" for the
+  dashboard. Writes are blocked at Caddy instead (see above).
 - **No rate limiting on GET endpoints.** Caddy would need a plugin; Cloudflare's
   default rate limits at the edge are enough for a homelab until abuse actually shows up.
 - **No WAF rules configured on Cloudflare.** The zone is on the free plan with
