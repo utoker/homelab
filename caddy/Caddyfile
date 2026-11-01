@@ -10,6 +10,15 @@
 }
 
 airmon.utoker.com {
+    # The public site is read-only. The Pi agent writes to 127.0.0.1:8000
+    # directly, and readings drive the purifier fans, so a write through here
+    # could only be someone faking air quality. GET/HEAD and the SPA pass.
+    @api_write {
+        path /api /api/*
+        not method GET HEAD
+    }
+    respond @api_write 404
+
     reverse_proxy 127.0.0.1:8000
 
     encode gzip zstd
