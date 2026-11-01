@@ -2,6 +2,7 @@
 #
 # Reverse proxy for the two Pi-hosted apps. Certs auto-fetched from
 # Let's Encrypt via HTTP-01 (requires port 80 open at the router).
+# Plus a LAN-only plain-HTTP listener on :8081 for the purifier ESP32s.
 
 {
     # global options
@@ -15,6 +16,33 @@ airmon.utoker.com {
 
     log {
         output file /var/log/caddy/airmon.utoker.com.log {
+            roll_size 10MiB
+            roll_keep 7
+        }
+    }
+}
+
+# Purifier ESP32s poll airmon's target-duty endpoint here over plain HTTP, so
+# fan control needs neither TLS nor internet. Only GET /api/purifier/* from
+# the LAN is proxied; everything else is a 404. ufw also limits 8081 to the
+# LAN (bootstrap-pi.sh); this matcher is the second lock.
+http://:8081 {
+    @purifier {
+        method GET
+        path /api/purifier/*
+        remote_ip 192.168.1.0/24
+    }
+
+    handle @purifier {
+        reverse_proxy 127.0.0.1:8000
+    }
+
+    handle {
+        respond 404
+    }
+
+    log {
+        output file /var/log/caddy/airmon-purifier-lan.log {
             roll_size 10MiB
             roll_keep 7
         }

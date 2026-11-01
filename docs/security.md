@@ -15,13 +15,22 @@ list is minimal, not paranoid.
 
 ```
 ufw allow OpenSSH
-ufw allow 80,443/tcp
+ufw allow 80/tcp
+ufw allow 443/tcp
+ufw allow from 192.168.1.0/24 to any port 53                                  # AdGuard DNS
+ufw allow from 192.168.1.0/24 to any port 3000 proto tcp                      # AdGuard admin
+ufw allow from 192.168.1.0/24 to any port 8081 proto tcp                      # airmon purifier API
 ufw enable
 ```
 
-That's the whole public surface: SSH + Caddy. Everything else (Postgres, Redis,
+That's the whole public surface: SSH + Caddy on 80/443. Everything else (Postgres, Redis,
 airmon-server on 8000, coldtrace-backend on 4000) listens on `127.0.0.1` only and is
 only reachable via Caddy.
+
+LAN only: AdGuard (53, 3000) and Caddy's plain-HTTP listener on 8081. The purifier
+ESP32s poll `GET /api/purifier/{name}/target` there, so fan control works without
+TLS or internet. Caddy proxies only `GET /api/purifier/*` from `192.168.1.0/24` on
+that port and returns 404 for everything else.
 
 ## fail2ban
 
