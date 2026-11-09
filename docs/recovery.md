@@ -344,3 +344,23 @@ sudo docker compose -f /opt/homelab/homeassistant/compose.yaml stop
 sudo tar czf ~/homeassistant-$(date +%F).tar.gz -C /srv/data/homeassistant .
 sudo docker compose -f /opt/homelab/homeassistant/compose.yaml start
 ```
+
+HA packages are copied from this repo (`homeassistant/packages/`) to
+`/srv/data/homeassistant/packages/`, so edit them here, not on the Pi.
+Everything else in `/srv/data/homeassistant`, including `.storage/`, belongs to
+HA and its UI. If the config was lost, let HA create a fresh
+`configuration.yaml`, then add the key that loads the packages:
+
+```yaml
+homeassistant:
+  packages: !include_dir_named packages
+```
+
+To apply a new or changed package:
+
+```bash
+sudo install -D -m 0644 -t /srv/data/homeassistant/packages \
+    ~/homelab/homeassistant/packages/*.yaml
+sudo docker exec homeassistant python -m homeassistant --script check_config --config /config
+sudo docker restart homeassistant
+```

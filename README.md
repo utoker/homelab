@@ -44,6 +44,7 @@ final dump is in `/srv/data/archive/coldtrace/`, and restoring means git history
    │  /srv/data/backups/         nightly dumps (mirrored to R2)│
    │  /srv/data/archive/         final ColdTrace dump    │
    │  /srv/data/homeassistant/   HA config, not backed up│
+   │    packages/                copied from this repo   │
    │                                                     │
    └─────────────────────────────────────────────────────┘
 ```
@@ -55,6 +56,7 @@ homelab/
 ├── README.md              this file
 ├── caddy/Caddyfile        airmon host + LAN purifier listener, reverse proxy
 ├── homeassistant/         compose file, copied to /opt/homelab/homeassistant/
+│   └── packages/          HA packages, copied to /srv/data/homeassistant/packages/
 ├── systemd/               all unit files, symlinked or copied to /etc/systemd/system/
 ├── journald/              drop-ins for /etc/systemd/journald.conf.d/ (persistent logs)
 ├── scripts/               deploy, backup, DDNS, healthcheck helpers

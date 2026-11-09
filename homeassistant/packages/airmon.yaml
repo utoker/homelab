@@ -1,0 +1,86 @@
+# /srv/data/homeassistant/packages/airmon.yaml
+#
+# airmon readings and purifier B's target duty, polled from airmon-server on
+# loopback. Copied from the homelab repo: edit it there, not on the Pi.
+#
+# The API has no "latest" endpoint, so ask for the last 60 s and use the newest
+# row. The since time has to end in Z: the + in a "+00:00" offset decodes to a
+# space in a query string and the API answers 422.
+#
+# The availability templates must never raise. HA renders them in strict mode
+# and leaves the entity available when one fails, so they have to cope with a
+# non-JSON response and an empty list (agent down). A single sensor's field can
+# also be null, so each one checks its own. HA skips value_template when
+# availability is false, so those can assume the row exists.
+#
+# The unit below is spelled with HA's Greek mu (U+03BC), not the micro sign.
+
+rest:
+  - resource_template: "http://127.0.0.1:8000/api/readings?since={{ (utcnow() - timedelta(seconds=60)).strftime('%Y-%m-%dT%H:%M:%SZ') }}&resolution=5s"
+    scan_interval: 30
+    sensor:
+      - name: Airmon PM1
+        unique_id: airmon_pm1
+        device_class: pm1
+        unit_of_measurement: "μg/m³"
+        availability: "{{ value_json is defined and (value_json.readings | default([]) | last | default({})).pm1 is number }}"
+        value_template: "{{ value_json.readings[-1].pm1 | round(2) }}"
+      - name: Airmon PM2.5
+        unique_id: airmon_pm25
+        device_class: pm25
+        unit_of_measurement: "μg/m³"
+        availability: "{{ value_json is defined and (value_json.readings | default([]) | last | default({})).pm25 is number }}"
+        value_template: "{{ value_json.readings[-1].pm25 | round(2) }}"
+      - name: Airmon PM4
+        unique_id: airmon_pm4
+        device_class: pm4
+        unit_of_measurement: "μg/m³"
+        availability: "{{ value_json is defined and (value_json.readings | default([]) | last | default({})).pm4 is number }}"
+        value_template: "{{ value_json.readings[-1].pm4 | round(2) }}"
+      - name: Airmon PM10
+        unique_id: airmon_pm10
+        device_class: pm10
+        unit_of_measurement: "μg/m³"
+        availability: "{{ value_json is defined and (value_json.readings | default([]) | last | default({})).pm10 is number }}"
+        value_template: "{{ value_json.readings[-1].pm10 | round(2) }}"
+      - name: Airmon CO2
+        unique_id: airmon_co2
+        device_class: carbon_dioxide
+        unit_of_measurement: ppm
+        availability: "{{ value_json is defined and (value_json.readings | default([]) | last | default({})).co2_ppm is number }}"
+        value_template: "{{ value_json.readings[-1].co2_ppm }}"
+      - name: Airmon temperature
+        unique_id: airmon_temperature
+        device_class: temperature
+        unit_of_measurement: "°C"
+        availability: "{{ value_json is defined and (value_json.readings | default([]) | last | default({})).temp_c is number }}"
+        value_template: "{{ value_json.readings[-1].temp_c | round(2) }}"
+      - name: Airmon humidity
+        unique_id: airmon_humidity
+        device_class: humidity
+        unit_of_measurement: "%"
+        availability: "{{ value_json is defined and (value_json.readings | default([]) | last | default({})).rh_pct is number }}"
+        value_template: "{{ value_json.readings[-1].rh_pct | round(2) }}"
+      - name: Airmon captured at
+        unique_id: airmon_captured_at
+        device_class: timestamp
+        availability: "{{ value_json is defined and (value_json.readings | default([]) | last | default({})).captured_at is string }}"
+        value_template: "{{ value_json.readings[-1].captured_at }}"
+    binary_sensor:
+      - name: Airmon CO2 warming
+        unique_id: airmon_co2_warming
+        availability: "{{ value_json is defined and (value_json.readings | default([]) | last | default({})).co2_warming is number }}"
+        value_template: "{{ value_json.readings[-1].co2_warming }}"
+
+  - resource: http://127.0.0.1:8000/api/purifier/b/target
+    scan_interval: 30
+    sensor:
+      - name: Purifier B target duty
+        unique_id: airmon_purifier_b_target_duty
+        unit_of_measurement: "%"
+        availability: "{{ value_json is defined and value_json.duty_pct is number }}"
+        value_template: "{{ value_json.duty_pct }}"
+      - name: Purifier B target reason
+        unique_id: airmon_purifier_b_target_reason
+        availability: "{{ value_json is defined and value_json.reason is string }}"
+        value_template: "{{ value_json.reason }}"
