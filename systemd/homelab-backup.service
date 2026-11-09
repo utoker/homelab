@@ -1,6 +1,6 @@
 [Unit]
-Description=Nightly backups: pg_dump ColdTrace + snapshot airmon SQLite, mirror offsite
-After=network-online.target postgresql@17-main.service
+Description=Nightly backups: snapshot airmon SQLite, mirror offsite
+After=network-online.target
 Wants=network-online.target
 RequiresMountsFor=/srv/data
 ConditionPathIsMountPoint=/srv/data

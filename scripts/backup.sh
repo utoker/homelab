@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Nightly backup: pg_dump ColdTrace, snapshot airmon SQLite dbs, mirror offsite.
+# Nightly backup: snapshot airmon SQLite dbs, mirror offsite.
 #
 # Local snapshots land in $BACKUPS (14-day rolling prune). If REMOTE_BACKUP_TARGET
 # is set, files are copied (not synced) to that rclone remote after each run, so
@@ -35,10 +35,6 @@ STAMP=$(date -u +%Y%m%dT%H%M%SZ)
 
 mkdir -p "$BACKUPS"
 
-echo "== pg_dump coldtrace =="
-sudo -u postgres pg_dump --clean --if-exists coldtrace \
-    | gzip > "$BACKUPS/coldtrace-$STAMP.sql.gz"
-
 echo "== sqlite airmon =="
 # online .backup gives a consistent snapshot without stopping the app.
 # buffer.db is deliberately NOT backed up: it is the agent's offline queue,
@@ -68,8 +64,8 @@ if [[ -r $SECRETS_PASSPHRASE_FILE ]]; then
     out=$BACKUPS/secrets-$STAMP.tar.gz.gpg
     tmp=$out.partial
     # Pipe tar -> gpg so plaintext lives only in a pipe buffer, never on disk.
-    # --ignore-failed-read: a target missing on this host is not a failure
-    # (e.g. a Pi that doesn't run coldtrace still backs up what it does have).
+    # --ignore-failed-read: a target missing on this host is not a failure;
+    # the archive still holds what the host does have.
     (
         umask 077
         tar --create --gzip --ignore-failed-read --file - \
@@ -77,8 +73,6 @@ if [[ -r $SECRETS_PASSPHRASE_FILE ]]; then
             /etc/homelab/backup.env \
             /etc/homelab/healthchecks.env \
             /root/.config/rclone/rclone.conf \
-            /home/umut/coldtrace/apps/backend/.env \
-            /home/umut/.coldtrace-setup/db_password \
             /var/lib/caddy \
             2>/dev/null \
           | gpg --batch --yes --quiet --symmetric \
@@ -96,6 +90,7 @@ fi
 echo "== prune older than $KEEP_DAYS days =="
 # '*.db' matches pre-gzip legacy snapshots (2026-07-18 and earlier); newly-
 # written snapshots use '*.db.gz'. Both share the same 14-day rolling window.
+# '*.sql.gz' ages out the nightly ColdTrace dumps left from before the archive.
 find "$BACKUPS" -maxdepth 1 -type f \
     \( -name '*.sql.gz' -o -name '*.db' -o -name '*.db.gz' -o -name '*.tar.gz.gpg' \) \
     -mtime "+$KEEP_DAYS" -print -delete

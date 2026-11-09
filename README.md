@@ -2,31 +2,26 @@
 
 Deployment orchestration for personal projects self-hosted on a Raspberry Pi 4 at home.
 
-Two apps are served publicly with HTTPS from the Pi:
+One app is served publicly with HTTPS from the Pi:
 
 - **[airmon](https://github.com/utoker/airmon)** — air quality monitor
   - Sensor agent reads three environmental sensors every 5 s
   - FastAPI backend + SQLite + Vite React SPA (served same-origin)
   - Public URL: `https://airmon.utoker.com`
 
-- **[coldtrace](https://github.com/utoker/coldtrace)** — cold-chain monitoring
-  - Next.js frontend on Vercel (`https://coldtrace.app`)
-  - GraphQL backend (Apollo/Express) on the Pi
-  - Public URL: `https://api.coldtrace.app`
+**ColdTrace is archived.** [coldtrace](https://github.com/utoker/coldtrace) was
+archived off the Pi on 2026-11-09. Its services are stopped and disabled. The
+final dump is in `/srv/data/archive/coldtrace/`, and restoring means git history
+(this repo at `9a0f831`) plus that dump.
 
 ## Topology
 
 ```
    Internet (HTTPS)
          │
-         ├── Vercel Edge ──►  coldtrace.app  (Next.js frontend)
-         │                     │
-         │                     ▼ Apollo Client → api.coldtrace.app/graphql
-         │                            │
-         │                            ▼
-         └── Cloudflare Edge (orange cloud proxy, hides origin IP)
+         ▼
+   Cloudflare Edge (orange cloud proxy, hides origin IP)
                    │  airmon.utoker.com
-                   │  api.coldtrace.app
                    ▼
              Spectrum residential router :80,443 forward to Pi
                    │
@@ -35,23 +30,18 @@ Two apps are served publicly with HTTPS from the Pi:
    │                                                     │
    │  Caddy (reverse proxy + auto Let's Encrypt)         │
    │    airmon.utoker.com  → 127.0.0.1:8000              │
-   │    api.coldtrace.app  → 127.0.0.1:4000              │
    │    :8081 (LAN, HTTP)  → GET /api/purifier/* only    │
    │                                                     │
    │  airmon-agent.service       samples every 5 s       │
    │  airmon-server.service      uvicorn :8000 (API + SPA)│
-   │  coldtrace-backend.service  apollo :4000            │
-   │  postgresql@17-main.service data on SSD             │
-   │  redis-server.service                               │
    │  AdGuardHome.service        LAN split-horizon DNS   │
    │  homelab-ddns.timer         Cloudflare DDNS every 5 min│
    │  homelab-backup.timer       nightly 03:15, mirrors to R2│
    │  airmon-maintenance.timer   daily 03:45, tiered downsample│
-   │  coldtrace-maintenance.timer daily 04:15, 180-day prune│
    │                                                     │
-   │  /srv/data/postgresql/      Postgres data           │
    │  /srv/data/airmon/          SQLite (buffer + server)│
    │  /srv/data/backups/         nightly dumps (mirrored to R2)│
+   │  /srv/data/archive/         final ColdTrace dump    │
    │                                                     │
    └─────────────────────────────────────────────────────┘
 ```
@@ -61,7 +51,7 @@ Two apps are served publicly with HTTPS from the Pi:
 ```
 homelab/
 ├── README.md              this file
-├── caddy/Caddyfile        both hosts + LAN purifier listener, reverse proxy
+├── caddy/Caddyfile        airmon host + LAN purifier listener, reverse proxy
 ├── systemd/               all unit files, symlinked or copied to /etc/systemd/system/
 ├── journald/              drop-ins for /etc/systemd/journald.conf.d/ (persistent logs)
 ├── scripts/               deploy, backup, DDNS, healthcheck helpers
@@ -70,7 +60,7 @@ homelab/
 
 ## Setup docs
 
-- [docs/ssd.md](docs/ssd.md) — mount the USB SSD and relocate Postgres + SQLite onto it
+- [docs/ssd.md](docs/ssd.md) — mount the USB SSD and move SQLite onto it
 - [docs/dns.md](docs/dns.md) — Cloudflare DNS + orange-cloud proxy, DDNS setup
 - [docs/dns-lan.md](docs/dns-lan.md) — AdGuard Home split-horizon DNS on the LAN
 - [docs/security.md](docs/security.md) — ufw, fail2ban, unattended-upgrades, Cloudflare edge
@@ -83,7 +73,6 @@ Never committed. Live on the Pi only, `mode 0600`, owner `root`:
 
 - `/etc/homelab/cloudflare.env` — Cloudflare API token + zone/record IDs for DDNS
 - `/etc/homelab/healthchecks.env` — healthchecks.io ping URL for the airmon check
-- `/home/umut/coldtrace/apps/backend/.env` — DB / Redis URLs, GraphQL secrets
 
 ## One-time bootstrap
 

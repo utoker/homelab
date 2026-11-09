@@ -1,6 +1,6 @@
 # /etc/caddy/Caddyfile
 #
-# Reverse proxy for the two Pi-hosted apps. Certs auto-fetched from
+# Reverse proxy for airmon, the Pi-hosted app. Certs auto-fetched from
 # Let's Encrypt via HTTP-01 (requires port 80 open at the router).
 # Plus a LAN-only plain-HTTP listener on :8081 for the purifier ESP32s.
 
@@ -52,19 +52,6 @@ http://:8081 {
 
     log {
         output file /var/log/caddy/airmon-purifier-lan.log {
-            roll_size 10MiB
-            roll_keep 7
-        }
-    }
-}
-
-api.coldtrace.app {
-    reverse_proxy 127.0.0.1:4000
-
-    encode gzip zstd
-
-    log {
-        output file /var/log/caddy/api.coldtrace.app.log {
             roll_size 10MiB
             roll_keep 7
         }

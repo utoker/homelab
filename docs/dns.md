@@ -24,8 +24,12 @@ origin IP). Records marked **grey** are DNS-only.
 | Type  | Name              | Content                                | Proxy   | TTL  |
 |-------|-------------------|----------------------------------------|---------|------|
 | A     | coldtrace.app     | 216.198.79.1                           | grey    | 600  |
-| A     | api.coldtrace.app | Pi public IP (DDNS)                    | orange  | auto |
+| A     | api.coldtrace.app | Stale, no longer updated by DDNS       | orange  | auto |
 | CNAME | *.coldtrace.app   | 317302a78fda56d9.vercel-dns-017.com    | grey    | 600  |
+
+ColdTrace was archived on 2026-11-09, so the Pi no longer serves
+`api.coldtrace.app`. The zone's records are left as they were until they are
+removed by hand.
 
 The two apex A records and both Vercel-target records stay **grey** — Vercel
 handles its own edge and proxying through Cloudflare would break its cert
@@ -41,8 +45,8 @@ provisioning.
 
 Residential IP can rotate. `homelab-ddns.timer` runs
 [scripts/update-ddns.sh](../scripts/update-ddns.sh) every 5 minutes to keep the
-two proxied A records (`airmon.utoker.com`, `api.coldtrace.app`) aligned with the
-Pi's current public IP via Cloudflare's REST API.
+proxied A record (`airmon.utoker.com`) aligned with the Pi's current public IP
+via Cloudflare's REST API.
 
 The record content is the *origin* IP; Cloudflare terminates the client
 connection at its edge and forwards to that IP. Clients never see the origin IP
@@ -58,9 +62,8 @@ directly.
    |----------|------------|-------|
    | Zone | DNS | Edit |
 
-   **Zone Resources**: Include → Specific zone → `utoker.com`, then Add more →
-   Specific zone → `coldtrace.app`. Do NOT use "All zones" — the DDNS process
-   should only be able to touch these two zones.
+   **Zone Resources**: Include → Specific zone → `utoker.com`. Do NOT use
+   "All zones" — the DDNS process should only be able to touch this zone.
 
    **Client IP filter**: your home public IP. Set a long TTL (multi-year is fine
    with the IP filter; the practical blast radius is zero from anywhere else).
@@ -70,7 +73,7 @@ directly.
 
    ```bash
    TOKEN=<paste the token>
-   for d in utoker.com coldtrace.app; do
+   for d in utoker.com; do
      ZID=$(curl -sH "Authorization: Bearer $TOKEN" \
        "https://api.cloudflare.com/client/v4/zones?name=$d" \
        | jq -r '.result[0].id')
@@ -89,8 +92,6 @@ directly.
    CF_API_TOKEN=paste_token_here
    CF_ZONE_ID_UTOKER=paste_utoker_zone_id_here
    CF_RECORD_ID_AIRMON=paste_airmon_record_id_here
-   CF_ZONE_ID_COLDTRACE=paste_coldtrace_zone_id_here
-   CF_RECORD_ID_API=paste_api_record_id_here
    EOF
    sudo chmod 600 /etc/homelab/cloudflare.env
    sudo chown root:root /etc/homelab/cloudflare.env

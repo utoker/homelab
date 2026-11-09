@@ -25,8 +25,6 @@ apt-get install -y --no-install-recommends \
     i2c-tools \
     ufw fail2ban unattended-upgrades \
     caddy \
-    postgresql-17 \
-    redis-server \
     sqlite3
 
 log "rclone from official .deb (Debian's 1.60.1 breaks against R2)"
@@ -124,7 +122,6 @@ Bootstrap done. Next:
        systemctl enable --now homelab-ddns.timer
   3. Deploy each app (see docs/recovery.md), then:
        systemctl enable --now airmon-server airmon-agent
-       systemctl enable --now coldtrace-backend
   4. Add DNS A records in Cloudflare, then:
        systemctl reload caddy    # certs auto-issued on first request
   5. Configure rclone remote for offsite backups (see backup.sh header),
