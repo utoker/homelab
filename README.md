@@ -35,6 +35,7 @@ final dump is in `/srv/data/archive/coldtrace/`, and restoring means git history
    │  airmon-agent.service       samples every 5 s       │
    │  airmon-server.service      uvicorn :8000 (API + SPA)│
    │  AdGuardHome.service        LAN split-horizon DNS   │
+   │  homeassistant (Docker)     :8123, LAN only         │
    │  homelab-ddns.timer         Cloudflare DDNS every 5 min│
    │  homelab-backup.timer       nightly 03:15, mirrors to R2│
    │  airmon-maintenance.timer   daily 03:45, tiered downsample│
@@ -42,6 +43,7 @@ final dump is in `/srv/data/archive/coldtrace/`, and restoring means git history
    │  /srv/data/airmon/          SQLite (buffer + server)│
    │  /srv/data/backups/         nightly dumps (mirrored to R2)│
    │  /srv/data/archive/         final ColdTrace dump    │
+   │  /srv/data/homeassistant/   HA config, not backed up│
    │                                                     │
    └─────────────────────────────────────────────────────┘
 ```
@@ -52,6 +54,7 @@ final dump is in `/srv/data/archive/coldtrace/`, and restoring means git history
 homelab/
 ├── README.md              this file
 ├── caddy/Caddyfile        airmon host + LAN purifier listener, reverse proxy
+├── homeassistant/         compose file, copied to /opt/homelab/homeassistant/
 ├── systemd/               all unit files, symlinked or copied to /etc/systemd/system/
 ├── journald/              drop-ins for /etc/systemd/journald.conf.d/ (persistent logs)
 ├── scripts/               deploy, backup, DDNS, healthcheck helpers

@@ -294,3 +294,50 @@ dump and its env files are in `/srv/data/archive/coldtrace/` on the SSD, with a
 copy on the workstation at `~/Projects/Archive/coldtrace/`. Restoring means git
 history (this repo at `9a0f831` for the units, scripts and Caddy block) plus
 that dump.
+
+## 11. Home Assistant
+
+Home Assistant runs in Docker, LAN only, with its config in
+`/srv/data/homeassistant`.
+
+**HA config is NOT in the nightly backup yet.** `backup.sh` does not read
+`/srv/data/homeassistant`, so nothing there reaches `/srv/data/backups/` or R2.
+If the SSD is lost, the config is gone unless you made a copy by hand.
+
+Install Docker Engine from Docker's apt repo (packages `docker-ce`,
+`docker-ce-cli`, `containerd.io`, `docker-compose-plugin`), then put the config
+in place. `bootstrap-pi.sh` already installs the drop-in that makes Docker wait
+for the SSD; the rest is by hand:
+
+```bash
+sudo install -d -m 0750 /srv/data/homeassistant
+sudo install -D -m 0644 ~/homelab/homeassistant/compose.yaml \
+    /opt/homelab/homeassistant/compose.yaml
+sudo ufw allow from 192.168.1.0/24 to any port 8123 proto tcp \
+    comment 'Home Assistant (LAN only)'
+```
+
+If the SSD survived, `/srv/data/homeassistant` is intact and there is nothing
+to restore. Start the container:
+
+```bash
+sudo docker compose -f /opt/homelab/homeassistant/compose.yaml up -d
+```
+
+To restore from a hand-made copy, extract it into an empty
+`/srv/data/homeassistant` with the container stopped, then start it:
+
+```bash
+sudo docker compose -f /opt/homelab/homeassistant/compose.yaml down
+sudo tar xzf /path/to/homeassistant-<stamp>.tar.gz -C /srv/data/homeassistant
+sudo docker compose -f /opt/homelab/homeassistant/compose.yaml up -d
+```
+
+Make that copy with the container stopped too, so HA's SQLite database is
+consistent:
+
+```bash
+sudo docker compose -f /opt/homelab/homeassistant/compose.yaml stop
+sudo tar czf ~/homeassistant-$(date +%F).tar.gz -C /srv/data/homeassistant .
+sudo docker compose -f /opt/homelab/homeassistant/compose.yaml start
+```
