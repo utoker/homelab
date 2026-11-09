@@ -1,13 +1,11 @@
 #!/usr/bin/env bash
-# Update Cloudflare A records for airmon.utoker.com and api.coldtrace.app
-# to the current public IP. Called every 5 min by the homelab-ddns.timer.
+# Update the Cloudflare A record for airmon.utoker.com to the current
+# public IP. Called every 5 min by the homelab-ddns.timer.
 #
 # Requires env vars (from /etc/homelab/cloudflare.env):
 #   CF_API_TOKEN            scoped Zone.DNS:Edit token
 #   CF_ZONE_ID_UTOKER       utoker.com zone id
 #   CF_RECORD_ID_AIRMON     airmon.utoker.com A-record id
-#   CF_ZONE_ID_COLDTRACE    coldtrace.app zone id
-#   CF_RECORD_ID_API        api.coldtrace.app A-record id
 #
 # Requires: curl, jq. Idempotent; only PATCHes if IP has changed.
 
@@ -16,15 +14,12 @@ set -euo pipefail
 : "${CF_API_TOKEN:?CF_API_TOKEN not set}"
 : "${CF_ZONE_ID_UTOKER:?CF_ZONE_ID_UTOKER not set}"
 : "${CF_RECORD_ID_AIRMON:?CF_RECORD_ID_AIRMON not set}"
-: "${CF_ZONE_ID_COLDTRACE:?CF_ZONE_ID_COLDTRACE not set}"
-: "${CF_RECORD_ID_API:?CF_RECORD_ID_API not set}"
 
 CF_API="https://api.cloudflare.com/client/v4"
 
 # (fqdn, zone_id, record_id) tuples to keep synced.
 RECORDS=(
     "airmon.utoker.com|$CF_ZONE_ID_UTOKER|$CF_RECORD_ID_AIRMON"
-    "api.coldtrace.app|$CF_ZONE_ID_COLDTRACE|$CF_RECORD_ID_API"
 )
 
 log() { printf '%s ddns: %s\n' "$(date -Iseconds)" "$*"; }

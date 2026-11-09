@@ -23,9 +23,8 @@ ufw allow from 192.168.1.0/24 to any port 8081 proto tcp                      # 
 ufw enable
 ```
 
-That's the whole public surface: SSH + Caddy on 80/443. Everything else (Postgres, Redis,
-airmon-server on 8000, coldtrace-backend on 4000) listens on `127.0.0.1` only and is
-only reachable via Caddy.
+That's the whole public surface: SSH + Caddy on 80/443. Everything else (airmon-server
+on 8000) listens on `127.0.0.1` only and is only reachable via Caddy.
 
 LAN only: AdGuard (53, 3000) and Caddy's plain-HTTP listener on 8081. The purifier
 ESP32s poll `GET /api/purifier/{name}/target` there, so fan control works without
@@ -49,7 +48,7 @@ the security suite auto-updates, which is what we want.
 
 ## Cloudflare in front
 
-`airmon.utoker.com` and `api.coldtrace.app` are both proxied by Cloudflare
+`airmon.utoker.com` is proxied by Cloudflare
 (orange-cloud). That gives us edge TLS termination, DDoS absorption at the
 edge, and origin-IP hiding for free. See [dns.md](dns.md) for how the records
 are configured and why the two apex records stay grey-cloud.

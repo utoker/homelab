@@ -3,14 +3,14 @@
 ## Why this exists
 
 The Sagemcom SAX1V1K router that Spectrum provides does not support NAT hairpin
-(loopback). LAN devices trying to reach `airmon.utoker.com` or `api.coldtrace.app`
+(loopback). LAN devices trying to reach `airmon.utoker.com`
 hit the Pi's public IP, the router refuses to loop it back, and the connection dies
 with `ERR_CONNECTION_REFUSED`. External clients on the internet are unaffected.
 
 The fix: run AdGuard Home on the Pi as an authoritative resolver for the LAN. It
 forwards most queries to upstream resolvers (`1.1.1.1`, `9.9.9.9`), but overrides
-`airmon.utoker.com` and `api.coldtrace.app` to `192.168.1.15` so LAN clients hit the
-Pi directly with no hairpin needed.
+`airmon.utoker.com` to `192.168.1.15` so LAN clients hit the Pi directly with no
+hairpin needed.
 
 ## Topology
 
@@ -37,17 +37,16 @@ Installs to `/opt/AdGuardHome/` as systemd service `AdGuardHome`. Bind config in
 
 ## DNS rewrites (the actual overrides)
 
-Two entries in AdGuardHome.yaml under `dns.rewrites`:
+One entry in AdGuardHome.yaml under `dns.rewrites`:
 ```yaml
 dns:
   rewrites:
     - domain: airmon.utoker.com
       answer: 192.168.1.15
-    - domain: api.coldtrace.app
-      answer: 192.168.1.15
 ```
 
-Add more here if we add more services on the Pi in the future.
+Add more here if we add more services on the Pi in the future. ColdTrace's old
+`api.coldtrace.app` rewrite can be deleted in the admin UI if it is still there.
 
 ## Router DNS — Sagemcom SAX1V1K quirk (Spectrum default router)
 
@@ -93,7 +92,6 @@ One-time cost, cleanest solution. Not urgent.
 From any LAN client:
 ```bash
 dig airmon.utoker.com    # should return 192.168.1.15
-dig api.coldtrace.app    # should return 192.168.1.15
 dig google.com           # should resolve normally (proves upstream works)
 ```
 

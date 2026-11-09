@@ -12,7 +12,7 @@ inside the encrypted archive):
   bucket. Without these you cannot even pull the backup down.
 - **Secrets-archive passphrase** — the content of `/etc/homelab/backup-passphrase`
   on the old Pi. Without this the archive is unopenable and everything else
-  (Cloudflare token, rclone config, coldtrace `.env`, caddy certs) is lost.
+  (Cloudflare token, rclone config, caddy certs) is lost.
 - **Cloudflare account login** — you'll issue a new API token if the old one
   ever leaked; the DNS zone stays.
 - **SSH pubkey** ready to push to the fresh Pi.
@@ -58,8 +58,6 @@ Otherwise (fresh SSD):
 
 ```bash
 # format + mount per docs/ssd.md
-# restore Postgres from the most recent backup:
-gunzip -c /path/to/coldtrace-<stamp>.sql.gz | sudo -u postgres psql -d coldtrace
 # restore airmon SQLite (server.db only; buffer.db is not backed up because it
 # is the agent's offline queue and every row is already durable in server.db --
 # the agent recreates it empty on first start). Backups are gzipped:
@@ -67,7 +65,7 @@ gunzip -c /path/to/server-<stamp>.db.gz > /srv/data/airmon/server.db
 sudo chown -R umut:umut /srv/data/airmon
 ```
 
-## 5. Clone and set up each app
+## 5. Clone and set up airmon
 
 The airmon repo is public, so no credential is needed to clone it. The layout
 splits git-source from runtime homes on purpose: `deploy-airmon.sh` rsyncs
@@ -87,11 +85,6 @@ python3 -m venv ~/airmon-server/.venv
 # first deploy populates ~/airmon, ~/airmon-server, ~/airmon-web from the checkout.
 # deploy-airmon.sh defaults AIRMON_REPO=~/airmon-repo; override if you cloned elsewhere.
 ~/homelab/scripts/deploy-airmon.sh
-
-# coldtrace (public repo; deploy runs in-place from the checkout)
-git clone https://github.com/utoker/coldtrace ~/coldtrace
-# create ~/coldtrace/apps/backend/.env from your password manager
-~/homelab/scripts/deploy-coldtrace.sh
 ```
 
 ## 6. Secrets: hand-place the passphrase, then decrypt the rest
@@ -150,9 +143,9 @@ sudo sh -c "gpg --batch --quiet --decrypt \
 sudo chown -R caddy:caddy /var/lib/caddy
 ```
 
-You now have `cloudflare.env`, `coldtrace/apps/backend/.env`, the coldtrace DB
-password, and the caddy ACME state (certs + private keys — no LE round-trip
-needed at first boot). Enable the DDNS timer once `cloudflare.env` is in place.
+You now have `cloudflare.env` and the caddy ACME state (certs + private keys —
+no LE round-trip needed at first boot). Enable the DDNS timer once
+`cloudflare.env` is in place.
 
 ### 6.3 Bootstrap paradox
 
@@ -204,9 +197,12 @@ in the Cloudflare dashboard, not by anything in this repo.
 | `expire-server-db`     | `nightly/server-`    | 30 days      |
 | `expire-coldtrace-dumps` | `nightly/coldtrace-` | 30 days      |
 
+`backup.sh` no longer writes `coldtrace-` dumps. That rule only ages out the ones
+already in the bucket, and can be deleted once they are gone.
+
 **No rule may ever match `secrets-`.** The encrypted secrets archive is the
 only offsite copy of the backup passphrase's downstream secrets (rclone.conf,
-cloudflare.env, coldtrace `.env`, caddy ACME state). Delete those objects and
+cloudflare.env, caddy ACME state). Delete those objects and
 a fresh-Pi rebuild becomes impossible even with the password manager. The
 per-prefix rules above are scoped narrowly so a future prefix change on
 snapshot filenames cannot accidentally start pruning secrets. If you ever add
@@ -221,8 +217,6 @@ is ~2.3 MB/year, so `server.db` settles near **100 MB** rather than growing
 without bound. Concretely:
 
 - `server.db` gzipped snapshot settles at ~40 MB (worst case ~100 MB).
-- `coldtrace-*.sql.gz` ~0.5 MB, capped further by coldtrace's own 180-day
-  retention (see below).
 - `secrets-*.tar.gz.gpg` ~10 KB.
 
 With snapshots effectively bounded, a 30-day retention window keeps the
@@ -238,8 +232,8 @@ plateau rather than climb monotonically.
 
 ## 6c. Retention on the Pi itself
 
-Two systemd timers prune persistent data on the Pi so its databases stay a
-predictable size. Both are installed by `bootstrap-pi.sh` and defined in the
+A systemd timer prunes persistent data on the Pi so its databases stay a
+predictable size. It is installed by `bootstrap-pi.sh` and defined in the
 [systemd/](../systemd/) directory here.
 
 **`airmon-maintenance.timer` (daily at 03:45 local, `RandomizedDelaySec=15min`)**
@@ -268,21 +262,6 @@ by design, and minute rows beyond 90 days are gone as well. The web UI's
 time-range picker already knows which tier to query for a given range, so a
 freshly restored DB works immediately without a rebuild step.
 
-**`coldtrace-maintenance.timer` (daily at 04:15 local, `RandomizedDelaySec=15min`)**
-
-Runs [scripts/coldtrace-retention.sh](../scripts/coldtrace-retention.sh),
-which deletes `readings` older than `KEEP_DAYS` (default **180**, override
-via `/etc/homelab/coldtrace-retention.env`) and then runs plain `VACUUM
-(ANALYZE)`. `VACUUM FULL` is deliberately avoided: it rewrites the whole
-table and holds an exclusive lock; plain `VACUUM` marks pages reusable
-without blocking writers so the table converges to a steady size.
-
-**`alerts` are never pruned.** They are the excursion history, they are
-tiny, and `alerts.deviceId` references `devices`, not `readings`, so
-pruning readings cannot cascade into alerts. Deleting alerts would erase
-the record of every out-of-spec event, which is the whole reason coldtrace
-exists.
-
 ## 7. Certs + DNS
 
 If public IP changed, wait for DDNS to catch up (a few minutes) or run
@@ -295,9 +274,7 @@ limit during testing, use the staging endpoint temporarily.
 
 ```bash
 sudo systemctl enable --now \
-    postgresql redis-server \
     airmon-server airmon-agent \
-    coldtrace-backend \
     caddy \
     homelab-ddns.timer
 ```
@@ -306,7 +283,14 @@ sudo systemctl enable --now \
 
 ```bash
 curl -I https://airmon.utoker.com
-curl -I https://api.coldtrace.app
 ```
 
-Both should return 200 with a valid cert.
+It should return 200 with a valid cert.
+
+## 10. ColdTrace (archived)
+
+ColdTrace was archived on 2026-11-09 and is not part of a rebuild. The final
+dump and its env files are in `/srv/data/archive/coldtrace/` on the SSD, with a
+copy on the workstation at `~/Projects/Archive/coldtrace/`. Restoring means git
+history (this repo at `9a0f831` for the units, scripts and Caddy block) plus
+that dump.
