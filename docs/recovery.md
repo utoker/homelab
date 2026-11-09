@@ -190,23 +190,26 @@ the offsite copy.
 the offsite copy. Object expiry is handled by R2 lifecycle rules configured
 in the Cloudflare dashboard, not by anything in this repo.
 
-**Rules currently in place on `homelab-pi-backups` (both under prefix `nightly/`):**
+**Rule currently in place on `homelab-pi-backups`:**
 
 | Rule name              | Prefix               | Delete after |
 | ---------------------- | -------------------- | ------------ |
 | `expire-server-db`     | `nightly/server-`    | 30 days      |
-| `expire-coldtrace-dumps` | `nightly/coldtrace-` | 30 days      |
 
-`backup.sh` no longer writes `coldtrace-` dumps. That rule only ages out the ones
-already in the bucket, and can be deleted once they are gone.
+The bucket also has Cloudflare's `Default Multipart Abort Rule`, which only
+cleans up abandoned uploads.
+
+`backup.sh` no longer writes `coldtrace-` dumps. The last ones and the old
+`expire-coldtrace-dumps` rule were deleted by hand on 2026-11-09. That rule had
+never fired, because its prefix started with a stray space.
 
 **No rule may ever match `secrets-`.** The encrypted secrets archive is the
 only offsite copy of the backup passphrase's downstream secrets (rclone.conf,
 cloudflare.env, caddy ACME state). Delete those objects and
 a fresh-Pi rebuild becomes impossible even with the password manager. The
-per-prefix rules above are scoped narrowly so a future prefix change on
+per-prefix rule above is scoped narrowly so a future prefix change on
 snapshot filenames cannot accidentally start pruning secrets. If you ever add
-a new artifact type, add a matching narrow rule; do not broaden either
+a new artifact type, add a matching narrow rule; do not broaden the
 existing rule to `nightly/`.
 
 **Sizing after tiered downsampling (shipped 2026-07-18):**

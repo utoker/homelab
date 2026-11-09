@@ -24,12 +24,13 @@ origin IP). Records marked **grey** are DNS-only.
 | Type  | Name              | Content                                | Proxy   | TTL  |
 |-------|-------------------|----------------------------------------|---------|------|
 | A     | coldtrace.app     | 216.198.79.1                           | grey    | 600  |
-| A     | api.coldtrace.app | Stale, no longer updated by DDNS       | orange  | auto |
 | CNAME | *.coldtrace.app   | 317302a78fda56d9.vercel-dns-017.com    | grey    | 600  |
 
-ColdTrace was archived on 2026-11-09, so the Pi no longer serves
-`api.coldtrace.app`. The zone's records are left as they were until they are
-removed by hand.
+ColdTrace was archived on 2026-11-09 and `api.coldtrace.app` no longer has a
+record of its own, so that name falls through to the wildcard. Keep the
+wildcard: `www.coldtrace.app` depends on it. `coldtrace.app` and `www` serve a
+static "archived" page from the Vercel project `coldtrace-archived`. Auto-renew
+is off at Porkbun, so the domain lapses on 2027-09-24.
 
 The two apex A records and both Vercel-target records stay **grey** — Vercel
 handles its own edge and proxying through Cloudflare would break its cert
