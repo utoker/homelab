@@ -31,6 +31,18 @@ ESP32s poll `GET /api/purifier/{name}/target` there, so fan control works withou
 TLS or internet. Caddy proxies only `GET /api/purifier/*` from `192.168.1.0/24` on
 that port and returns 404 for everything else.
 
+Home Assistant on 8123 is open to `192.168.1.0/24` only:
+
+```
+ufw allow from 192.168.1.0/24 to any port 8123 proto tcp                      # Home Assistant
+```
+
+`bootstrap-pi.sh` does not set this rule; it is added with the install (see
+[recovery.md](recovery.md)). It listens on every interface, so ufw is the only
+thing keeping it on the LAN. The container uses host networking and publishes
+no ports, because Docker published ports bypass ufw. Do not add `ports:` to its
+compose file. No Caddy site or Cloudflare record points at 8123.
+
 ## fail2ban
 
 Default install ships an SSH jail. It bans an IP after 5 failed auths for 10 min.

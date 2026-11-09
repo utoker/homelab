@@ -1,0 +1,18 @@
+# /opt/homelab/homeassistant/compose.yaml
+#
+# Home Assistant, LAN only. Host networking and no ports: on purpose: Docker
+# published ports bypass ufw, and ufw is what keeps 8123 on the LAN.
+#
+# No mem_limit: the Pi boots with cgroup_disable=memory, so it would be ignored.
+
+services:
+  homeassistant:
+    image: ghcr.io/home-assistant/home-assistant:2026.11.0
+    container_name: homeassistant
+    network_mode: host
+    restart: unless-stopped
+    environment:
+      - TZ=America/New_York
+    volumes:
+      - /srv/data/homeassistant:/config
+      - /etc/localtime:/etc/localtime:ro
