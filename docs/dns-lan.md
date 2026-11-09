@@ -45,8 +45,7 @@ dns:
       answer: 192.168.1.15
 ```
 
-Add more here if we add more services on the Pi in the future. ColdTrace's old
-`api.coldtrace.app` rewrite can be deleted in the admin UI if it is still there.
+Add more here if we add more services on the Pi in the future.
 
 ## Router DNS — Sagemcom SAX1V1K quirk (Spectrum default router)
 
