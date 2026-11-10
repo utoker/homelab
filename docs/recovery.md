@@ -303,9 +303,12 @@ that dump.
 Home Assistant runs in Docker, LAN only, with its config in
 `/srv/data/homeassistant`.
 
-**HA config is NOT in the nightly backup yet.** `backup.sh` does not read
-`/srv/data/homeassistant`, so nothing there reaches `/srv/data/backups/` or R2.
-If the SSD is lost, the config is gone unless you made a copy by hand.
+The nightly backup writes `homeassistant-<stamp>.tar.gz.gpg` to
+`/srv/data/backups/` and R2, encrypted with the same passphrase as the secrets
+tarball. It holds the whole config dir, including `.storage/` (the account,
+integrations and their logins), but not the recorder database
+(`home-assistant_v2.db`, state history only), logs or caches. A restore brings
+back everything except the history graphs.
 
 Install Docker Engine from Docker's apt repo (packages `docker-ce`,
 `docker-ce-cli`, `containerd.io`, `docker-compose-plugin`), then put the config
@@ -327,17 +330,22 @@ to restore. Start the container:
 sudo docker compose -f /opt/homelab/homeassistant/compose.yaml up -d
 ```
 
-To restore from a hand-made copy, extract it into an empty
-`/srv/data/homeassistant` with the container stopped, then start it:
+To restore from the nightly backup, pull the newest archive as in section 6.2
+(with `--include 'homeassistant-*.tar.gz.gpg'`), then decrypt it into an empty
+`/srv/data/homeassistant` with the container stopped:
 
 ```bash
 sudo docker compose -f /opt/homelab/homeassistant/compose.yaml down
-sudo tar xzf /path/to/homeassistant-<stamp>.tar.gz -C /srv/data/homeassistant
+sudo sh -c "gpg --batch --quiet --decrypt \
+    --passphrase-file /etc/homelab/backup-passphrase \
+    /srv/data/backups/homeassistant-<stamp>.tar.gz.gpg \
+  | tar xzf - -C /srv/data/homeassistant"
 sudo docker compose -f /opt/homelab/homeassistant/compose.yaml up -d
 ```
 
-Make that copy with the container stopped too, so HA's SQLite database is
-consistent:
+To keep the history graphs too, make a full copy by hand with the container
+stopped, so HA's SQLite database is consistent, and restore it the same way
+with plain `tar xzf`:
 
 ```bash
 sudo docker compose -f /opt/homelab/homeassistant/compose.yaml stop
