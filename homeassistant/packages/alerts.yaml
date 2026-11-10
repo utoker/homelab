@@ -1,6 +1,7 @@
 # /srv/data/homeassistant/packages/alerts.yaml
 #
-# Phone alerts for air quality, airmon going offline, and the Litter-Robot.
+# Phone alerts for air quality, airmon going offline, the Litter-Robot, and
+# printer ink.
 # Copied from the homelab repo: edit it here, not on the Pi.
 #
 # Each numeric_state trigger fires once when the value crosses the threshold
@@ -119,3 +120,44 @@ automation:
           message: >-
             The waste drawer is at
             {{ states('sensor.bedroom_litter_robot_5_waste_drawer') }}%. Empty it.
+
+  - id: printer_ink_low
+    alias: "Printer: ink low"
+    mode: queued
+    max: 5
+    variables:
+      prefix: "{{ '[Test] ' if trigger.get('platform') is none else '' }}"
+      names:
+        black_bk: Black
+        black_pgbk: Pigment black
+        cyan: Cyan
+        magenta: Magenta
+        yellow: Yellow
+    triggers:
+      # The Canon reports levels in coarse steps, so this fires at 10% or less.
+      - trigger: numeric_state
+        entity_id:
+          - sensor.bedroom_canon_ts6300_series_black_bk
+          - sensor.bedroom_canon_ts6300_series_black_pgbk
+          - sensor.bedroom_canon_ts6300_series_cyan
+          - sensor.bedroom_canon_ts6300_series_magenta
+          - sensor.bedroom_canon_ts6300_series_yellow
+        below: 20
+    conditions:
+      # Only a drop seen while the printer is awake counts. Waking from sleep
+      # takes a sensor from unknown straight to its level, which would
+      # otherwise repeat the alert on every wake-up.
+      - condition: template
+        value_template: "{{ trigger.from_state.state | is_number }}"
+    actions:
+      - action: notify.mobile_app_iphone_14pro
+        data:
+          title: "{{ prefix }}Printer ink low"
+          message: >-
+            {% if prefix %}Current levels:
+            {% for key, name in names.items() -%}
+            {{ name }} {{ states('sensor.bedroom_canon_ts6300_series_' ~ key) }}%{{ ', ' if not loop.last }}
+            {%- endfor %}.
+            {% else %}{{ names[trigger.entity_id.split('series_')[1]] }} ink is at
+            {{ trigger.to_state.state }}%. Time to order a cartridge.
+            {% endif %}
