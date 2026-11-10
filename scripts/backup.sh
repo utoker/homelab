@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Nightly backup: snapshot airmon SQLite dbs, mirror offsite.
+# Nightly backup: snapshot airmon SQLite dbs, encrypt secrets and the Home
+# Assistant config, mirror offsite.
 #
 # Local snapshots land in $BACKUPS (14-day rolling prune). If REMOTE_BACKUP_TARGET
 # is set, files are copied (not synced) to that rclone remote after each run, so
@@ -31,6 +32,7 @@ set -euo pipefail
 BACKUPS=${BACKUPS:-/srv/data/backups}
 KEEP_DAYS=${KEEP_DAYS:-14}
 SECRETS_PASSPHRASE_FILE=${SECRETS_PASSPHRASE_FILE:-/etc/homelab/backup-passphrase}
+HA_CONFIG=${HA_CONFIG:-/srv/data/homeassistant}
 STAMP=$(date -u +%Y%m%dT%H%M%SZ)
 
 mkdir -p "$BACKUPS"
@@ -85,6 +87,35 @@ else
     echo "== SKIPPING secrets tarball: $SECRETS_PASSPHRASE_FILE not readable =="
     echo "   Create it (mode 0600, root:root) with a strong passphrase and save"
     echo "   a copy to your password manager. See docs/recovery.md section 6.1."
+fi
+
+if [[ -r $SECRETS_PASSPHRASE_FILE && -d $HA_CONFIG ]]; then
+    echo "== encrypt Home Assistant config tarball =="
+    # .storage/ holds HA's account, auth tokens and integration logins, so this
+    # gets the same tar -> gpg pipe as the secrets tarball. Left out: the
+    # recorder database (state history only; airmon's readings live in
+    # server.db, and tar can't copy a live SQLite file consistently), logs and
+    # caches. HA rewrites .storage files by atomic rename, so reading them while
+    # it runs is safe, but tar can still exit 1 ("file changed as we read it").
+    # Accept 1; anything higher is a real failure.
+    out=$BACKUPS/homeassistant-$STAMP.tar.gz.gpg
+    tmp=$out.partial
+    (
+        umask 077
+        { tar --create --gzip --file - -C "$HA_CONFIG" \
+              --exclude='home-assistant_v2.db*' \
+              --exclude='home-assistant.log*' \
+              --exclude='.cache' \
+              --exclude='tts' \
+              --exclude='backups' \
+              . \
+          || (( $? == 1 )); } \
+          | gpg --batch --yes --quiet --symmetric \
+                --cipher-algo AES256 \
+                --passphrase-file "$SECRETS_PASSPHRASE_FILE" \
+                --output "$tmp"
+    )
+    mv "$tmp" "$out"
 fi
 
 echo "== prune older than $KEEP_DAYS days =="
