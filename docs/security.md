@@ -51,6 +51,15 @@ ufw allow in on tailscale0 to any port 53                                     # 
 ufw allow in on tailscale0 to any port 8123 proto tcp                         # Home Assistant
 ```
 
+HA finds the Kasa smart plugs (two HS103s) by UDP broadcast. The plugs answer
+by unicast from source port 20002 (9999 on older firmware), and conntrack
+doesn't match a reply to a broadcast, so ufw dropped those replies as new
+inbound traffic and HA saw nothing. This rule lets them in from the LAN only:
+
+```
+ufw allow proto udp from 192.168.1.0/24 port 9999,20002                       # Kasa discovery replies
+```
+
 ## fail2ban
 
 Default install ships an SSH jail. It bans an IP after 5 failed auths for 10 min.
