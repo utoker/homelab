@@ -43,6 +43,14 @@ thing keeping it on the LAN. The container uses host networking and publishes
 no ports, because Docker published ports bypass ufw. Do not add `ports:` to its
 compose file. No Caddy site or Cloudflare record points at 8123.
 
+The tailnet also reaches AdGuard DNS and Home Assistant, on the `tailscale0`
+interface only (see [tailscale.md](tailscale.md)):
+
+```
+ufw allow in on tailscale0 to any port 53                                     # AdGuard DNS
+ufw allow in on tailscale0 to any port 8123 proto tcp                         # Home Assistant
+```
+
 ## fail2ban
 
 Default install ships an SSH jail. It bans an IP after 5 failed auths for 10 min.
