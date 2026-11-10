@@ -1,0 +1,121 @@
+# /srv/data/homeassistant/packages/alerts.yaml
+#
+# Phone alerts for air quality, airmon going offline, and the Litter-Robot.
+# Copied from the homelab repo: edit it here, not on the Pi.
+#
+# Each numeric_state trigger fires once when the value crosses the threshold
+# and re-arms only after it drops back, so a long episode sends one alert.
+#
+# Running an automation by hand (automation.trigger) passes a trigger with no
+# platform. `prefix` turns that into "[Test] " so a manual run can't be
+# mistaken for a real alert, and the offline alert skips its wait-for-recovery
+# step on a test run.
+
+automation:
+  - id: airmon_co2_high
+    alias: "Air: CO2 high"
+    mode: single
+    max_exceeded: silent
+    variables:
+      prefix: "{{ '[Test] ' if trigger.get('platform') is none else '' }}"
+    triggers:
+      - trigger: numeric_state
+        entity_id: sensor.airmon_co2
+        above: 1000
+        for: { minutes: 10 }
+    conditions:
+      # The MH-Z19B reads low for ~3 min after power-on; don't alert on that.
+      - condition: state
+        entity_id: binary_sensor.airmon_co2_warming
+        state: "off"
+    actions:
+      - action: notify.mobile_app_iphone_14pro
+        data:
+          title: "{{ prefix }}Stale air: CO₂ {{ states('sensor.airmon_co2') }} ppm"
+          message: >-
+            {% set aqi = states('sensor.airnow_air_quality_index') | int(-1) %}
+            {% if aqi < 0 %}Open a door or window for a few minutes. Outdoor air data is unavailable.
+            {% elif aqi <= 50 %}Outdoor air is good (AQI {{ aqi }}). Open a window for 10–15 minutes.
+            {% elif aqi <= 100 %}Outdoor air is moderate (AQI {{ aqi }}). A short airing is fine.
+            {% else %}Outdoor air is unhealthy (AQI {{ aqi }}). Open an inside door instead of a window.
+            {% endif %}
+
+  - id: airmon_pm25_spike
+    alias: "Air: PM2.5 spike"
+    mode: single
+    max_exceeded: silent
+    variables:
+      prefix: "{{ '[Test] ' if trigger.get('platform') is none else '' }}"
+    triggers:
+      - trigger: numeric_state
+        entity_id: sensor.airmon_pm2_5
+        above: 35
+        for: { minutes: 10 }
+    actions:
+      - action: notify.mobile_app_iphone_14pro
+        data:
+          title: "{{ prefix }}PM2.5 high: {{ states('sensor.airmon_pm2_5') | float(0) | round(0) }} µg/m³"
+          message: >-
+            {% set inside = states('sensor.airmon_pm2_5') | float(0) %}
+            {% set outside = states('sensor.airnow_pm2_5') | float(-1) %}
+            Purifier B is at {{ states('sensor.bedroom_purifier_b_target') | float(0) | round(0) }}%.
+            {% if outside < 0 %}Outdoor PM2.5 is unavailable.
+            {% elif outside >= inside %}It's {{ outside }} outside too, so keep the windows closed.
+            {% else %}Outside is {{ outside }}, so the source is indoors: cooking, smoke or dust.
+            {% endif %}
+
+  - id: airmon_offline
+    alias: "Air: airmon offline"
+    mode: single
+    max_exceeded: silent
+    variables:
+      prefix: "{{ '[Test] ' if trigger.get('platform') is none else '' }}"
+    triggers:
+      # The REST sensors go unavailable when the last 60 s has no readings
+      # (agent down) or the server doesn't answer. If the whole Pi is down, HA
+      # is down too; healthchecks.io covers that case.
+      - trigger: state
+        entity_id: sensor.airmon_captured_at
+        to: unavailable
+        for: { minutes: 5 }
+    actions:
+      - action: notify.mobile_app_iphone_14pro
+        data:
+          title: "{{ prefix }}airmon offline"
+          message: >-
+            No new air readings for 5 minutes. Purifier B falls back to a fixed
+            40% until readings return.
+      - condition: template
+        value_template: "{{ prefix == '' }}"
+      - wait_for_trigger:
+          - trigger: state
+            entity_id: sensor.airmon_captured_at
+            from: unavailable
+        timeout: { hours: 24 }
+        continue_on_timeout: false
+      - action: notify.mobile_app_iphone_14pro
+        data:
+          title: "airmon back online"
+          message: "Air readings are flowing again."
+
+  - id: litter_robot_drawer_full
+    alias: "Litter-Robot: drawer full"
+    mode: single
+    max_exceeded: silent
+    variables:
+      prefix: "{{ '[Test] ' if trigger.get('platform') is none else '' }}"
+    triggers:
+      - trigger: numeric_state
+        entity_id: sensor.bedroom_litter_robot_5_waste_drawer
+        above: 89
+      # "dfs" is Whisker's drawer-full status code.
+      - trigger: state
+        entity_id: sensor.bedroom_litter_robot_5_status_code
+        to: dfs
+    actions:
+      - action: notify.mobile_app_iphone_14pro
+        data:
+          title: "{{ prefix }}Litter-Robot drawer full"
+          message: >-
+            The waste drawer is at
+            {{ states('sensor.bedroom_litter_robot_5_waste_drawer') }}%. Empty it.
