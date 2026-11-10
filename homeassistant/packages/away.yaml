@@ -1,0 +1,94 @@
+# /srv/data/homeassistant/packages/away.yaml
+#
+# Things that happen when Umut leaves home: Maria (the Deebot) cleans, and the
+# TV gets turned off if it was left on. "Away" is person.umut, i.e. his iPhone's
+# location via the HA app, so it's based on his phone only.
+# Copied from the homelab repo: edit it here, not on the Pi.
+#
+# A manual run (automation.trigger) gets the "[Test] " prefix like alerts.yaml,
+# and only sends the notification: it never starts the vacuum or turns off the
+# TV, so testing can't move anything in the house.
+
+automation:
+  - id: maria_clean_when_away
+    alias: "Maria: clean when I leave"
+    mode: single
+    max_exceeded: silent
+    variables:
+      prefix: "{{ '[Test] ' if trigger.get('platform') is none else '' }}"
+      last_job: "{{ states('event.bedroom_maria_last_job') }}"
+    triggers:
+      - trigger: state
+        entity_id: person.umut
+        to: not_home
+        for: { minutes: 10 }
+    conditions:
+      - condition: time
+        after: "09:00:00"
+        before: "19:00:00"
+      - condition: state
+        entity_id: vacuum.bedroom_maria
+        state: docked
+      # Once a day: skip if Maria already finished a job today, whether this
+      # automation, the Ecovacs app or a schedule started it.
+      - condition: template
+        value_template: >-
+          {{ last_job in ['unknown', 'unavailable']
+             or (last_job | as_datetime | as_local).date() < now().date() }}
+    actions:
+      - if: "{{ prefix == '' }}"
+        then:
+          - action: vacuum.start
+            target:
+              entity_id: vacuum.bedroom_maria
+      - action: notify.mobile_app_iphone_14pro
+        data:
+          title: "{{ prefix }}Maria started cleaning"
+          message: "You've been away 10 minutes. You'll get a message when she's done."
+      - condition: template
+        value_template: "{{ prefix == '' }}"
+      - wait_for_trigger:
+          - trigger: state
+            entity_id: vacuum.bedroom_maria
+            to: docked
+        timeout: { hours: 4 }
+        continue_on_timeout: false
+      # The job's area and duration sensors update a moment after docking.
+      - delay: { minutes: 1 }
+      - action: notify.mobile_app_iphone_14pro
+        data:
+          title: "Maria finished cleaning"
+          message: >-
+            {{ (states('sensor.bedroom_maria_area_cleaned') | float(0) * 10.764) | round(0) | int }} sq ft
+            in {{ states('sensor.bedroom_maria_cleaning_duration') | float(0) | round(0) | int }} min.
+
+  - id: away_tv_off
+    alias: "Away: turn off the TV"
+    mode: single
+    max_exceeded: silent
+    variables:
+      prefix: "{{ '[Test] ' if trigger.get('platform') is none else '' }}"
+      tv: media_player.living_room_fire_tv_192_168_1_122
+    triggers:
+      - trigger: state
+        entity_id: person.umut
+        to: not_home
+        for: { minutes: 10 }
+    conditions:
+      - condition: not
+        conditions:
+          - condition: state
+            entity_id: media_player.living_room_fire_tv_192_168_1_122
+            state: ["off", standby, unavailable, unknown]
+    actions:
+      - if: "{{ prefix == '' }}"
+        then:
+          - action: media_player.turn_off
+            target:
+              entity_id: "{{ tv }}"
+      - action: notify.mobile_app_iphone_14pro
+        data:
+          title: "{{ prefix }}TV turned off"
+          message: >-
+            {% if prefix %}The TV is {{ states(tv) }} right now, so leaving would turn it off.
+            {% else %}You left with the TV on, so HA turned it off.{% endif %}

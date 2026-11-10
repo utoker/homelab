@@ -1,7 +1,7 @@
 # /srv/data/homeassistant/packages/alerts.yaml
 #
-# Phone alerts for air quality, airmon going offline, the Litter-Robot, and
-# printer ink.
+# Phone alerts for air quality, airmon going offline, the Litter-Robot,
+# printer ink, and Maria (the Deebot) getting stuck.
 # Copied from the homelab repo: edit it here, not on the Pi.
 #
 # Each numeric_state trigger fires once when the value crosses the threshold
@@ -161,3 +161,21 @@ automation:
             {% else %}{{ names[trigger.entity_id.split('series_')[1]] }} ink is at
             {{ trigger.to_state.state }}%. Time to order a cartridge.
             {% endif %}
+
+  - id: maria_error
+    alias: "Maria: needs help"
+    mode: single
+    max_exceeded: silent
+    variables:
+      prefix: "{{ '[Test] ' if trigger.get('platform') is none else '' }}"
+    triggers:
+      - trigger: state
+        entity_id: vacuum.bedroom_maria
+        to: error
+    actions:
+      - action: notify.mobile_app_iphone_14pro
+        data:
+          title: "{{ prefix }}Maria needs help"
+          message: >-
+            She stopped with an error (stuck, tangled or lifted, usually).
+            Check the Ecovacs app. Battery {{ states('sensor.bedroom_maria_battery') }}%.
