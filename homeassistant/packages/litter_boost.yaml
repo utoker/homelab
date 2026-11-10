@@ -1,0 +1,50 @@
+# /srv/data/homeassistant/packages/litter_boost.yaml
+#
+# Runs purifier B harder while a cat uses the Litter-Robot (they share the
+# bedroom). Litter smell is gas, which airmon's PM sensor can't see, so the
+# Litter-Robot's status is the trigger. HA only reports the visit: airmon-server
+# owns the duty (100%, or 70% from 23:00 to 07:00) and the ESP32 ramps to it.
+# Copied from the homelab repo: edit it there, not on the Pi.
+#
+# Status goes rdy -> cst (cat in) -> ccp (cleaning) -> rdy. Each POST replaces
+# the server's boost rather than extending it. A visit sets 30 minutes, which
+# only runs out if the return to rdy is missed (cst lasted 2 to 17 minutes on
+# 2026-11-10), and the return to rdy cuts it to a 10-minute tail.
+#
+# The endpoint only answers on loopback: Caddy rejects POST on the public site
+# and on the ESP32s' :8081 listener. A manual run (automation.trigger) really
+# boosts the fans; on the Pi, end it early with
+#   curl -X POST -H 'Content-Type: application/json' -d '{"minutes": 0}' \
+#     http://127.0.0.1:8000/api/purifier/b/boost
+
+rest_command:
+  purifier_b_boost:
+    url: http://127.0.0.1:8000/api/purifier/b/boost
+    method: post
+    content_type: application/json
+    payload: '{"minutes": {{ minutes | int }}}'
+
+automation:
+  - id: purifier_b_litter_visit
+    alias: "Purifier B: boost on a litter visit"
+    triggers:
+      - trigger: state
+        entity_id: sensor.bedroom_litter_robot_5_status_code
+        to: cst
+    actions:
+      - action: rest_command.purifier_b_boost
+        data:
+          minutes: 30
+
+  - id: purifier_b_litter_done
+    alias: "Purifier B: wind down after the litter cycle"
+    triggers:
+      - trigger: state
+        entity_id: sensor.bedroom_litter_robot_5_status_code
+        to: rdy
+        # HA restarting, or the integration reloading, isn't a visit.
+        not_from: [unknown, unavailable]
+    actions:
+      - action: rest_command.purifier_b_boost
+        data:
+          minutes: 10
