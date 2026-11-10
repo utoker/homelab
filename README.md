@@ -71,6 +71,7 @@ homelab/
 - [docs/security.md](docs/security.md) — ufw, fail2ban, unattended-upgrades, Cloudflare edge
 - [docs/recovery.md](docs/recovery.md) — rebuild the Pi from scratch, backups, R2 lifecycle, retention timers
 - [docs/monitoring.md](docs/monitoring.md) — healthchecks.io dead-man's switch, persistent logs, what to do when it alerts
+- [docs/tailscale.md](docs/tailscale.md) — Tailscale: Home Assistant and AdGuard ad blocking on the phone away from home
 
 ## Secrets
 
