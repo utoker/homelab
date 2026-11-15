@@ -19,6 +19,27 @@ origin IP). Records marked **grey** are DNS-only.
 | A     | airmon.utoker.com | Pi public IP (DDNS)    | orange  | auto |
 | CNAME | www.utoker.com    | cname.vercel-dns.com   | grey    | 600  |
 
+**utoker.com mail (iCloud+ Custom Email Domain, added 2026-11-12)**
+
+`umut@utoker.com` is hosted by iCloud Mail. iCloud is the only service that
+sends as @utoker.com. The `email` line in the Caddyfile is just the Let's
+Encrypt contact address and sends nothing.
+
+| Type  | Name                       | Content                                       | Proxy | TTL  |
+|-------|----------------------------|-----------------------------------------------|-------|------|
+| MX 10 | utoker.com                 | mx01.mail.icloud.com                          | —     | 3600 |
+| MX 10 | utoker.com                 | mx02.mail.icloud.com                          | —     | 3600 |
+| TXT   | utoker.com                 | `v=spf1 include:icloud.com ~all`              | —     | 3600 |
+| TXT   | utoker.com                 | `apple-domain=FBkrmrylUeXNf328` (ownership)   | —     | 3600 |
+| CNAME | sig1._domainkey.utoker.com | sig1.dkim.utoker.com.at.icloudmailadmin.com   | grey  | 3600 |
+| TXT   | _dmarc.utoker.com          | `v=DMARC1; p=quarantine; adkim=r; aspf=r`     | —     | 3600 |
+
+If another service ever sends as @utoker.com (a contact form, newsletter or
+transactional mail), first add it to the SPF `include:`s and set up its DKIM
+with a utoker.com selector. The `p=quarantine` DMARC policy sends unaligned
+mail to spam. Do not create a second SPF record: merge the new include into
+the existing one.
+
 **coldtrace.app**
 
 | Type  | Name              | Content                                | Proxy   | TTL  |
