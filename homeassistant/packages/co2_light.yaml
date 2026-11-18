@@ -1,0 +1,119 @@
+# /srv/data/homeassistant/packages/co2_light.yaml
+#
+# Turns the living-room TV light strip orange while CO2 is high, then puts it
+# back the way it was. Copied from the homelab repo: edit it here, not on the Pi.
+#
+# - Orange: after 10 min above 1000 ppm, the same time as the phone alert. The
+#   strip is switched on if it's off.
+# - Back to normal: after 20 s below 900 ppm. A strip that was off goes off
+#   again. The gap between 900 and 1000 stops it flickering when CO2 hovers
+#   near 1000.
+# - The CO2 sensor is in the bedroom, so the strip shows bedroom air.
+#
+# "The way it was" is kept in two temporary scenes:
+# - scene.tv_before_co2: the strip as it was, on or off, with its look.
+# - scene.tv_look_before_co2: made only when the strip was off. Switching a Hue
+#   strip on brings back its last look, so the automation switches it on first
+#   and saves that look. Restoring the look before switching the strip off again
+#   stops the bridge from bringing it back orange next time.
+# If someone switches the strip off while it's orange, it stays off when CO2
+# drops, and its look comes back the next time it's switched on.
+# HA forgets both scenes on restart. A restart during high CO2 leaves the strip
+# orange until someone changes it.
+#
+# A manual run (automation.trigger) turns the strip orange for 10 s, then
+# restores it, including switching it back off if it was off.
+
+automation:
+  - id: air_co2_tv_light
+    alias: "Air: CO2 high, TV light orange"
+    mode: queued
+    variables:
+      test: "{{ trigger.get('platform') is none }}"
+    triggers:
+      - trigger: numeric_state
+        entity_id: sensor.airmon_co2
+        above: 1000
+        for: { minutes: 10 }
+        id: high
+      - trigger: numeric_state
+        entity_id: sensor.airmon_co2
+        below: 900
+        for: { seconds: 20 }
+        id: low
+      - trigger: state
+        entity_id: light.living_room_tv
+        from: "off"
+        to: "on"
+        id: light_on
+    actions:
+      - variables:
+          saved: "{{ states.scene.tv_before_co2 is not none }}"
+          co2: "{{ states('sensor.airmon_co2') | float(0) }}"
+          strip_on: "{{ is_state('light.living_room_tv', 'on') }}"
+          # The MH-Z19B reads unreliably for ~3 min after power-on.
+          # light_on: switched back on in the middle of an episode.
+          go_orange: >-
+            {{ test
+               or (trigger.id == 'high' and co2 > 1000
+                   and is_state('binary_sensor.airmon_co2_warming', 'off'))
+               or (trigger.id == 'light_on' and saved and co2 >= 900) }}
+
+      - if: "{{ go_orange }}"
+        then:
+          # Save once per episode; a later trigger would save orange.
+          - if: "{{ not saved }}"
+            then:
+              - action: scene.create
+                data:
+                  scene_id: tv_before_co2
+                  snapshot_entities: [light.living_room_tv]
+              - if: "{{ not strip_on }}"
+                then:
+                  - action: light.turn_on
+                    target: { entity_id: light.living_room_tv }
+                  - wait_template: "{{ is_state('light.living_room_tv', 'on') }}"
+                    timeout: { seconds: 10 }
+                  - action: scene.create
+                    data:
+                      scene_id: tv_look_before_co2
+                      snapshot_entities: [light.living_room_tv]
+          - action: light.turn_on
+            target: { entity_id: light.living_room_tv }
+            data: { rgb_color: [255, 100, 0], transition: 2 }
+
+      - if: "{{ test and go_orange }}"
+        then:
+          - delay: { seconds: 10 }
+
+      - variables:
+          saved: "{{ states.scene.tv_before_co2 is not none }}"
+          was_off: "{{ states.scene.tv_look_before_co2 is not none }}"
+          strip_on: "{{ is_state('light.living_room_tv', 'on') }}"
+          # The strip is off on 'low' only if someone switched it off while
+          # orange: leave it off and restore when it's next switched on.
+          restore: >-
+            {{ saved and (test
+               or (trigger.id == 'low' and strip_on)
+               or (trigger.id == 'light_on' and co2 < 900)) }}
+          # Someone who just switched the strip on wants it on.
+          switch_off: "{{ was_off and (test or trigger.id == 'low') }}"
+
+      - if: "{{ restore }}"
+        then:
+          - action: scene.turn_on
+            target:
+              entity_id: "{{ 'scene.tv_look_before_co2' if was_off else 'scene.tv_before_co2' }}"
+            data: { transition: 2 }
+          - if: "{{ switch_off }}"
+            then:
+              # Let the look land on the bridge before switching off.
+              - delay: { seconds: 3 }
+              - action: light.turn_off
+                target: { entity_id: light.living_room_tv }
+                data: { transition: 2 }
+          - action: scene.delete
+            target:
+              entity_id: >-
+                {{ ['scene.tv_before_co2', 'scene.tv_look_before_co2']
+                   if was_off else ['scene.tv_before_co2'] }}
