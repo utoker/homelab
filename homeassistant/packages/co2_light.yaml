@@ -1,0 +1,82 @@
+# /srv/data/homeassistant/packages/co2_light.yaml
+#
+# Turns the living-room TV light strip orange while CO2 is high, then puts it
+# back the way it was. Copied from the homelab repo: edit it here, not on the Pi.
+#
+# - The CO2 sensor is in the bedroom, so the strip shows bedroom air.
+# - It only recolors the strip when it's already on, so it never lights an
+#   empty room at night. Switching the strip on while CO2 is high turns it
+#   orange straight away.
+# - The strip's look before it went orange is saved in a temporary scene,
+#   scene.tv_before_co2. If the strip is off when CO2 drops, the bridge would
+#   bring it back orange next time, so the saved look is kept and restored as
+#   soon as it's switched on.
+# - HA forgets that scene on restart. A restart during high CO2 leaves the
+#   strip orange until someone picks a color or scene for it.
+# - Orange appears 10 min after CO2 passes 1000 ppm, the same time as the phone
+#   alert. It clears after 5 min below 900, a gap that stops it flickering
+#   when CO2 hovers around 1000.
+#
+# A manual run (automation.trigger) turns the strip orange for 10 s, then
+# restores it, but only if the strip is on.
+
+automation:
+  - id: air_co2_tv_light
+    alias: "Air: CO2 high, TV light orange"
+    mode: queued
+    variables:
+      test: "{{ trigger.get('platform') is none }}"
+    triggers:
+      - trigger: numeric_state
+        entity_id: sensor.airmon_co2
+        above: 1000
+        for: { minutes: 10 }
+        id: high
+      - trigger: numeric_state
+        entity_id: sensor.airmon_co2
+        below: 900
+        for: { minutes: 5 }
+        id: low
+      - trigger: state
+        entity_id: light.living_room_tv
+        from: "off"
+        to: "on"
+        id: light_on
+    actions:
+      - variables:
+          saved: "{{ states.scene.tv_before_co2 is not none }}"
+          co2: "{{ states('sensor.airmon_co2') | float(0) }}"
+          strip_on: "{{ is_state('light.living_room_tv', 'on') }}"
+          # The MH-Z19B reads unreliably for ~3 min after power-on.
+          go_orange: >-
+            {{ strip_on and (test or (
+                 trigger.id in ['high', 'light_on'] and co2 > 1000
+                 and is_state('binary_sensor.airmon_co2_warming', 'off'))) }}
+          restore: >-
+            {{ strip_on and saved and not test
+               and trigger.id in ['low', 'light_on'] and co2 < 900 }}
+
+      - if: "{{ go_orange }}"
+        then:
+          # Save the look once; a second trigger mid-episode would save orange.
+          - if: "{{ not saved }}"
+            then:
+              - action: scene.create
+                data:
+                  scene_id: tv_before_co2
+                  snapshot_entities: [light.living_room_tv]
+          - action: light.turn_on
+            target: { entity_id: light.living_room_tv }
+            data: { rgb_color: [255, 100, 0], transition: 2 }
+
+      - if: "{{ test and go_orange }}"
+        then:
+          - delay: { seconds: 10 }
+
+      - if: "{{ restore or (test and go_orange) }}"
+        then:
+          - action: scene.turn_on
+            target: { entity_id: scene.tv_before_co2 }
+            data: { transition: 2 }
+          - action: scene.delete
+            target: { entity_id: scene.tv_before_co2 }
