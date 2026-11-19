@@ -1,0 +1,112 @@
+# /srv/data/homeassistant/packages/movie_mode.yaml
+#
+# Movie mode: when the living-room Fire TV has been playing for 5 s, in any
+# app (Spotify included), the couch strip and the two Feit bulbs dim to 10%.
+# When it has stopped playing (paused, idle, off, unavailable) for 5 s, they go
+# back to how they were. It also checks when the app changes, when HA starts
+# and when automations reload, in case the TV is already playing then.
+# Copied from the homelab repo: edit it here, not on the Pi.
+#
+# - Only lights that are on and brighter than 10% get dimmed. Movie mode never
+#   switches a light on.
+# - The TV strip is left alone: it's the TV's backlight, and co2_light.yaml
+#   turns it orange when CO2 is high.
+# - The Fire TV home screen reports "idle", but its app is excluded anyway in
+#   case a trailer autoplays there.
+# - Each dimmed light's look is saved in its own temporary scene,
+#   scene.movie_before_<light>, once per movie. On restore, a light someone
+#   switched off during the movie stays off, and a light switched on during
+#   the movie is left as it is. HA forgets these scenes on restart, so a
+#   restart mid-movie leaves the lights dim.
+# - The Feit bulbs (Tuya) ignore the 2 s fade; only the Hue strip fades.
+#
+# A manual run (automation.trigger) dims for 10 s, then restores.
+
+automation:
+  - id: living_room_movie_mode
+    alias: "Living room: movie mode"
+    mode: queued
+    variables:
+      test: "{{ trigger.get('platform') is none }}"
+      lights:
+        - light.living_room_couch
+        - light.living_room_light_1
+        - light.living_room_light_2
+    triggers:
+      - trigger: state
+        entity_id: media_player.living_room_fire_tv_192_168_1_122
+        to: playing
+        for: { seconds: 5 }
+        id: play
+      # Switching apps (YouTube to Spotify) doesn't leave "playing", so the
+      # trigger above misses it.
+      - trigger: state
+        entity_id: media_player.living_room_fire_tv_192_168_1_122
+        attribute: app_id
+        for: { seconds: 5 }
+        id: play
+      # Already playing when HA starts or automations reload.
+      - trigger: homeassistant
+        event: start
+        id: play
+      - trigger: event
+        event_type: automation_reloaded
+        id: play
+      # not_to also ignores attribute-only updates while paused or idle.
+      - trigger: state
+        entity_id: media_player.living_room_fire_tv_192_168_1_122
+        not_to: playing
+        for: { seconds: 5 }
+        id: stop
+    actions:
+      - variables:
+          dim: >-
+            {{ test or (trigger.id == 'play'
+               and is_state('media_player.living_room_fire_tv_192_168_1_122', 'playing')
+               and state_attr('media_player.living_room_fire_tv_192_168_1_122', 'app_id')
+                   != 'com.amazon.tv.launcher') }}
+          # 26/255 is 10%: don't brighten a light that's already dimmer.
+          to_dim: >-
+            {{ expand(lights) | selectattr('state', 'eq', 'on')
+               | selectattr('attributes.brightness', 'gt', 26)
+               | map(attribute='entity_id') | list }}
+
+      - if: "{{ dim and to_dim | count > 0 }}"
+        then:
+          - repeat:
+              for_each: "{{ to_dim }}"
+              sequence:
+                - variables:
+                    scene_id: "movie_before_{{ repeat.item.split('.')[1] }}"
+                # Save once per movie; a second save would save the dim look.
+                - if: "{{ states.scene[scene_id] is none }}"
+                  then:
+                    - action: scene.create
+                      data:
+                        scene_id: "{{ scene_id }}"
+                        snapshot_entities: ["{{ repeat.item }}"]
+          - action: light.turn_on
+            target: { entity_id: "{{ to_dim }}" }
+            data: { brightness_pct: 10, transition: 2 }
+
+      - if: "{{ test }}"
+        then:
+          - delay: { seconds: 10 }
+
+      - if: "{{ test or trigger.id == 'stop' }}"
+        then:
+          - repeat:
+              for_each: "{{ lights }}"
+              sequence:
+                - variables:
+                    scene_id: "movie_before_{{ repeat.item.split('.')[1] }}"
+                    saved: "{{ states.scene[scene_id] is not none }}"
+                - if: "{{ saved and is_state(repeat.item, 'on') }}"
+                  then:
+                    - action: scene.turn_on
+                      target: { entity_id: "scene.{{ scene_id }}" }
+                      data: { transition: 2 }
+                - if: "{{ saved }}"
+                  then:
+                    - action: scene.delete
+                      target: { entity_id: "scene.{{ scene_id }}" }
