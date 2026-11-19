@@ -1,8 +1,10 @@
 # /srv/data/homeassistant/packages/movie_mode.yaml
 #
-# Movie mode: when the living-room Fire TV has been playing for 5 s, the couch
-# strip and the two Feit bulbs dim to 10%. When it has stopped playing (paused,
-# idle, off, unavailable) for 5 s, they go back to how they were.
+# Movie mode: when the living-room Fire TV has been playing for 5 s, in any
+# app (Spotify included), the couch strip and the two Feit bulbs dim to 10%.
+# When it has stopped playing (paused, idle, off, unavailable) for 5 s, they go
+# back to how they were. It also checks when the app changes, when HA starts
+# and when automations reload, in case the TV is already playing then.
 # Copied from the homelab repo: edit it here, not on the Pi.
 #
 # - Only lights that are on and brighter than 10% get dimmed. Movie mode never
@@ -36,6 +38,20 @@ automation:
         to: playing
         for: { seconds: 5 }
         id: play
+      # Switching apps (YouTube to Spotify) doesn't leave "playing", so the
+      # trigger above misses it.
+      - trigger: state
+        entity_id: media_player.living_room_fire_tv_192_168_1_122
+        attribute: app_id
+        for: { seconds: 5 }
+        id: play
+      # Already playing when HA starts or automations reload.
+      - trigger: homeassistant
+        event: start
+        id: play
+      - trigger: event
+        event_type: automation_reloaded
+        id: play
       # not_to also ignores attribute-only updates while paused or idle.
       - trigger: state
         entity_id: media_player.living_room_fire_tv_192_168_1_122
@@ -46,6 +62,7 @@ automation:
       - variables:
           dim: >-
             {{ test or (trigger.id == 'play'
+               and is_state('media_player.living_room_fire_tv_192_168_1_122', 'playing')
                and state_attr('media_player.living_room_fire_tv_192_168_1_122', 'app_id')
                    != 'com.amazon.tv.launcher') }}
           # 26/255 is 10%: don't brighten a light that's already dimmer.
