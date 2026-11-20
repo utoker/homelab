@@ -1,0 +1,39 @@
+# /srv/data/homeassistant/packages/homekit.yaml
+#
+# Shares the living-room lights with Apple Home through HA's HomeKit Bridge,
+# so Siri can switch them: "Hey Siri, turn off the living room lights".
+# Copied from the homelab repo: edit it here, not on the Pi.
+#
+# - Only the four lights are shared, not light.living_room_lights. In the Home
+#   app they all go in the Living Room room, and Siri treats "living room
+#   lights" as every light in that room. Sharing the group too would add a
+#   fifth light that switches the other four.
+# - Pairing: on first start HA shows a notification with an 8-digit code. In
+#   the Home app: + > Add Accessory > More options, pick the bridge, enter the
+#   code. Names and rooms set in the Home app stay there.
+# - Needs ufw to allow 21064/tcp from the LAN (docs/security.md). Discovery
+#   uses mDNS, which ufw's default before.rules already let in.
+# - advertise_ip: the Pi also has tailscale0 and docker0 addresses, and the
+#   Home app must be told the LAN one.
+# - Works while the iPhone is on home Wi-Fi. Away from home needs an Apple home
+#   hub (HomePod or Apple TV) in the house.
+homekit:
+  - name: HA Lights
+    port: 21064
+    advertise_ip: 192.168.1.15
+    filter:
+      include_entities:
+        - light.living_room_couch
+        - light.living_room_tv
+        - light.living_room_light_1
+        - light.living_room_light_2
+    entity_config:
+      light.living_room_couch:
+        name: Couch Light
+      # "TV" alone makes Siri think of a television.
+      light.living_room_tv:
+        name: TV Strip
+      light.living_room_light_1:
+        name: Light 1
+      light.living_room_light_2:
+        name: Light 2
