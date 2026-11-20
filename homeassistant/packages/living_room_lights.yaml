@@ -1,0 +1,20 @@
+# /srv/data/homeassistant/packages/living_room_lights.yaml
+#
+# One switch for every living-room light, across the Hue bridge and the Feit
+# Wi-Fi bulbs (Tuya cloud). Copied from the homelab repo: edit it here, not on
+# the Pi.
+#
+# - Shows up as light.living_room_lights. Tap it in the HA app, a widget,
+#   Control Center or Siri to turn them all on or off together.
+# - The group counts as on while any light in it is on, so one tap turns
+#   everything off even if only one light was on.
+# - The Kasa plugs are left out: nothing is plugged into them yet.
+light:
+  - platform: group
+    name: Living room lights
+    unique_id: living_room_lights
+    entities:
+      - light.living_room_couch # Hue
+      - light.living_room_tv # Hue strip behind the TV
+      - light.living_room_light_1 # Feit bulb
+      - light.living_room_light_2 # Feit bulb
