@@ -321,6 +321,8 @@ sudo install -D -m 0644 ~/homelab/homeassistant/compose.yaml \
     /opt/homelab/homeassistant/compose.yaml
 sudo ufw allow from 192.168.1.0/24 to any port 8123 proto tcp \
     comment 'Home Assistant (LAN only)'
+sudo ufw allow from 192.168.1.0/24 to any port 21064 proto tcp \
+    comment 'HA HomeKit Bridge (LAN only)'
 ```
 
 If the SSD survived, `/srv/data/homeassistant` is intact and there is nothing

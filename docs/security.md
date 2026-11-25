@@ -60,6 +60,15 @@ inbound traffic and HA saw nothing. This rule lets them in from the LAN only:
 ufw allow proto udp from 192.168.1.0/24 port 9999,20002                       # Kasa discovery replies
 ```
 
+HA's HomeKit Bridge (`homeassistant/packages/homekit.yaml`) shares the
+living-room lights with Apple Home so Siri can switch them. The iPhone finds
+it by mDNS, which ufw's default `before.rules` already accepts (multicast to
+224.0.0.251 and ff02::fb on 5353/udp), then connects to it on 21064/tcp:
+
+```
+ufw allow from 192.168.1.0/24 to any port 21064 proto tcp                     # HomeKit Bridge
+```
+
 ## fail2ban
 
 Default install ships an SSH jail. It bans an IP after 5 failed auths for 10 min.
