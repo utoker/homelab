@@ -12,6 +12,13 @@
 # mistaken for a real alert, and the offline alert skips its wait-for-recovery
 # step on a test run.
 
+input_boolean:
+  # Restored across restarts. A fresh install starts "off", so the first fill
+  # alerts only after one emptying; turn it on by hand after a rebuild.
+  litter_robot_drawer_alert_armed:
+    name: "Litter-Robot drawer alert armed"
+    icon: mdi:bell-check
+
 automation:
   - id: airmon_co2_high
     alias: "Air: CO2 high"
@@ -99,24 +106,52 @@ automation:
           title: "airmon back online"
           message: "Air readings are flowing again."
 
+  # Alerts once per fill when the drawer goes over 60%, and again if Whisker
+  # reports it full. The drawer reading wobbles by a few points (64, 60, 61,
+  # 60, 61 on 2026-11-21), so a plain "above 60" trigger would alert several
+  # times per fill. input_boolean.litter_robot_drawer_alert_armed is the
+  # memory: the 60% alert turns it off, and the drawer dropping below 40%
+  # (only emptying does that) turns it back on.
   - id: litter_robot_drawer_full
-    alias: "Litter-Robot: drawer full"
-    mode: single
-    max_exceeded: silent
+    alias: "Litter-Robot: drawer over 60%"
+    mode: queued
+    max: 5
     variables:
       prefix: "{{ '[Test] ' if trigger.get('platform') is none else '' }}"
+      armed: input_boolean.litter_robot_drawer_alert_armed
     triggers:
       - trigger: numeric_state
         entity_id: sensor.bedroom_litter_robot_5_waste_drawer
-        above: 89
+        above: 60
+        id: level
+      - trigger: numeric_state
+        entity_id: sensor.bedroom_litter_robot_5_waste_drawer
+        below: 40
+        id: rearm
       # "dfs" is Whisker's drawer-full status code.
       - trigger: state
         entity_id: sensor.bedroom_litter_robot_5_status_code
         to: dfs
+        id: full
     actions:
+      - if: "{{ trigger.get('id') == 'rearm' }}"
+        then:
+          - action: input_boolean.turn_on
+            target: { entity_id: "{{ armed }}" }
+          - stop: "Emptied; re-armed for the next fill"
+      - if: "{{ trigger.get('id') == 'level' }}"
+        then:
+          - if: "{{ is_state(armed, 'off') }}"
+            then:
+              - stop: "Already alerted this fill"
+          - action: input_boolean.turn_off
+            target: { entity_id: "{{ armed }}" }
       - action: notify.mobile_app_iphone_14pro
         data:
-          title: "{{ prefix }}Litter-Robot drawer full"
+          title: >-
+            {{ prefix }}Litter-Robot drawer
+            {{ 'full' if trigger.get('id') == 'full'
+               else states('sensor.bedroom_litter_robot_5_waste_drawer') ~ '%' }}
           message: >-
             The waste drawer is at
             {{ states('sensor.bedroom_litter_robot_5_waste_drawer') }}%. Empty it.
